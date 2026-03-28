@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Container, Card, Button, Form, Alert, Spinner, Image, Badge } from 'react-bootstrap';
+import { Container, Card, Button, Form, Alert, Spinner, Image, Modal, Badge } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
-import { generateQR } from '../../services/sessionService';
+import api from '../../services/api';
 
 const GenerateQR = () => {
   const { uuid } = useParams();
@@ -11,16 +11,32 @@ const GenerateQR = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [timeLeft, setTimeLeft] = useState(null);
+  const [timerInterval, setTimerInterval] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [existingSession, setExistingSession] = useState(null);
 
-  const handleGenerate = async (e) => {
-    e.preventDefault();
+  const generateQR = async (useExisting = false, forceNew = false) => {
     setError('');
     setLoading(true);
+    setShowModal(false);
     try {
-      const data = await generateQR(uuid, duration);
+      const response = await api.post(`/sessions/course/${uuid}/qr`, {
+        duration_minutes: duration,
+        use_existing: useExisting,
+        force_new: forceNew
+      });
+
+      if (response.data.has_existing) {
+        setExistingSession(response.data.data.existing_session);
+        setShowModal(true);
+        setLoading(false);
+        return;
+      }
+
+      const data = response.data.data;
       setQrData(data);
 
-      let seconds = duration * 60;
+      let seconds = parseInt(duration) * 60;
       setTimeLeft(seconds);
       const interval = setInterval(() => {
         seconds -= 1;
@@ -31,11 +47,27 @@ const GenerateQR = () => {
           setTimeLeft(null);
         }
       }, 1000);
+      setTimerInterval(interval);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to generate QR code.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCancelSession = async () => {
+    if (timerInterval) clearInterval(timerInterval);
+    try {
+      await api.delete(`/sessions/${qrData.session_uuid}`);
+    } catch (err) {}
+    setQrData(null);
+    setTimeLeft(null);
+    setTimerInterval(null);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    generateQR(false, false);
   };
 
   const formatTime = (seconds) => {
@@ -49,12 +81,13 @@ const GenerateQR = () => {
       <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => navigate('/instructor')}>
         ← Back
       </Button>
-<Card className="shadow-sm mx-auto" style={{ maxWidth: '500px' }}>        <Card.Header><strong>Generate QR Code</strong></Card.Header>
+      <Card className="shadow-sm mx-auto" style={{ maxWidth: '500px' }}>
+        <Card.Header><strong>Generate QR Code</strong></Card.Header>
         <Card.Body>
           {error && <Alert variant="danger">{error}</Alert>}
 
           {!qrData ? (
-            <Form onSubmit={handleGenerate}>
+            <Form onSubmit={handleSubmit}>
               <Form.Group className="mb-3">
                 <Form.Label>QR Duration (minutes)</Form.Label>
                 <Form.Control
@@ -88,7 +121,7 @@ const GenerateQR = () => {
                 variant="outline-danger"
                 size="sm"
                 className="mt-2"
-                onClick={() => { setQrData(null); setTimeLeft(null); }}
+                onClick={handleCancelSession}
               >
                 Cancel Session
               </Button>
@@ -96,6 +129,38 @@ const GenerateQR = () => {
           )}
         </Card.Body>
       </Card>
+
+      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Active Session Exists</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>An active session already exists for today:</p>
+          <div className="bg-light rounded p-3 mb-3">
+            <p className="mb-1"><strong>Date:</strong> {existingSession?.session_date}</p>
+            <p className="mb-0"><strong>Time:</strong> {existingSession?.start_time} - {existingSession?.end_time}</p>
+          </div>
+          <p className="text-muted small">
+            Would you like to generate a new QR for the existing session, or create a new session?
+            <br />
+            <strong>Note:</strong> If you have multiple groups at different times, create a new session.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            onClick={() => generateQR(false, true)}
+          >
+            Create New Session
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => generateQR(true, false)}
+          >
+            Use Existing Session
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 };

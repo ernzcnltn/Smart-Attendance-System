@@ -3,7 +3,8 @@ import { Container, Row, Col, Card, Table, Button, Form, Modal, Alert, Spinner, 
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCourseByUUID, getCourseStudents, enrollStudent } from '../../services/courseService';
 import { getAttendanceStats, sendLowAttendanceNotifications } from '../../services/attendanceService';
-import { exportExcel, exportPDF } from '../../services/exportService';
+import { exportExcel, exportPDF, exportSessionExcel, exportSessionPDF } from '../../services/exportService';
+import { getSessionsByCourse } from '../../services/sessionService';
 
 const ManageCourse = () => {
   const { uuid } = useParams();
@@ -11,6 +12,7 @@ const ManageCourse = () => {
   const [course, setCourse] = useState(null);
   const [students, setStudents] = useState([]);
   const [stats, setStats] = useState(null);
+  const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -22,14 +24,16 @@ const ManageCourse = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [c, s, st] = await Promise.all([
+        const [c, s, st, sess] = await Promise.all([
           getCourseByUUID(uuid),
           getCourseStudents(uuid),
-          getAttendanceStats(uuid)
+          getAttendanceStats(uuid),
+          getSessionsByCourse(uuid)
         ]);
         setCourse(c);
         setStudents(s);
         setStats(st);
+        setSessions(sess);
       } catch (err) {
         setError('Failed to load course data.');
       } finally {
@@ -131,7 +135,7 @@ const ManageCourse = () => {
         <Button variant="outline-dark" onClick={() => exportPDF(uuid)}>Export PDF</Button>
       </div>
 
-      <Card className="shadow-sm">
+      <Card className="shadow-sm mb-4">
         <Card.Header><strong>Student Attendance</strong></Card.Header>
         <Card.Body>
           {students.length === 0 ? (
@@ -167,7 +171,45 @@ const ManageCourse = () => {
         </Card.Body>
       </Card>
 
-      {/* Enroll Student Modal */}
+      <Card className="shadow-sm mb-4">
+        <Card.Header><strong>Sessions</strong></Card.Header>
+        <Card.Body>
+          {sessions.length === 0 ? (
+            <p className="text-muted">No sessions found.</p>
+          ) : (
+            <Table responsive hover>
+              <thead className="table-dark">
+                <tr>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Attendance</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((s, i) => (
+                  <tr key={i}>
+                    <td>{new Date(s.session_date).toLocaleDateString('en-GB')}</td>
+                    <td>{s.start_time} - {s.end_time}</td>
+                    <td>{s.attendance_count} students</td>
+                    <td>
+                      <div className="d-flex gap-1">
+                        <Button size="sm" variant="outline-secondary" onClick={() => exportSessionExcel(s.uuid)}>
+                          Excel
+                        </Button>
+                        <Button size="sm" variant="outline-dark" onClick={() => exportSessionPDF(s.uuid)}>
+                          PDF
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card.Body>
+      </Card>
+
       <Modal show={showEnrollModal} onHide={() => { setShowEnrollModal(false); setStudentUUID(''); setSearchResults([]); }}>
         <Modal.Header closeButton>
           <Modal.Title>Enroll Student</Modal.Title>
@@ -213,7 +255,6 @@ const ManageCourse = () => {
         </Modal.Body>
       </Modal>
 
-      {/* Confirm Modal */}
       <Modal show={confirmModal.show} onHide={() => setConfirmModal({ ...confirmModal, show: false })} centered>
         <Modal.Header closeButton>
           <Modal.Title>{confirmModal.title}</Modal.Title>

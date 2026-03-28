@@ -11,3 +11,13 @@ export const exportPDF = (course_uuid) => {
   const token = getToken();
   window.open(`${BASE_URL}/export/courses/${course_uuid}/pdf?token=${token}`, '_blank');
 };
+
+export const exportSessionExcel = (session_uuid) => {
+  const token = getToken();
+  window.open(`${BASE_URL}/export/sessions/${session_uuid}/excel?token=${token}`, '_blank');
+};
+
+export const exportSessionPDF = (session_uuid) => {
+  const token = getToken();
+  window.open(`${BASE_URL}/export/sessions/${session_uuid}/pdf?token=${token}`, '_blank');
+};

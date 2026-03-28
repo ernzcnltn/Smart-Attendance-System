@@ -24,3 +24,8 @@ export const getMyAttendance = async () => {
   const response = await api.get('/sessions/my-attendance');
   return response.data.data;
 };
+
+export const getSessionsByCourse = async (course_uuid) => {
+  const response = await api.get(`/sessions/course/${course_uuid}`);
+  return response.data.data;
+};

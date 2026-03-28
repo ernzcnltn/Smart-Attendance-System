@@ -36,7 +36,6 @@ const exportAttendanceExcel = async (req, res) => {
     sheet.getCell('A2').alignment = { horizontal: 'center' };
 
     sheet.addRow([]);
-
     sheet.addRow(['Student Name', 'Student No', 'Email', 'Session Date', 'Start Time', 'End Time', 'Marked At', 'Method']);
     sheet.getRow(4).font = { bold: true };
     sheet.getRow(4).fill = {
@@ -152,4 +151,153 @@ const exportAttendancePDF = async (req, res) => {
   }
 };
 
-module.exports = { exportAttendanceExcel, exportAttendancePDF };
+const exportSessionAttendanceExcel = async (req, res) => {
+  const { session_uuid } = req.params;
+
+  try {
+    const [session] = await pool.query(`
+      SELECT cs.id, cs.session_date, cs.start_time, cs.end_time,
+             c.course_code, c.course_name, c.semester
+      FROM class_sessions cs
+      JOIN courses c ON cs.course_id = c.id
+      WHERE cs.uuid = ?
+    `, [session_uuid]);
+
+    if (session.length === 0) return res.status(404).json({ success: false, message: 'Session not found.' });
+
+    const [records] = await pool.query(`
+      SELECT u.full_name, u.student_number, u.email,
+             ar.marked_at, ar.method
+      FROM attendance_records ar
+      JOIN users u ON ar.student_id = u.id
+      WHERE ar.session_id = ?
+      ORDER BY u.full_name ASC
+    `, [session[0].id]);
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Session Attendance');
+
+    sheet.mergeCells('A1:F1');
+    sheet.getCell('A1').value = `${session[0].course_code} — ${session[0].course_name}`;
+    sheet.getCell('A1').font = { bold: true, size: 14 };
+    sheet.getCell('A1').alignment = { horizontal: 'center' };
+
+    sheet.mergeCells('A2:F2');
+    sheet.getCell('A2').value = `Session: ${new Date(session[0].session_date).toLocaleDateString('en-GB')} | ${session[0].start_time} - ${session[0].end_time}`;
+    sheet.getCell('A2').alignment = { horizontal: 'center' };
+
+    sheet.addRow([]);
+    sheet.addRow(['Student Name', 'Student No', 'Email', 'Marked At', 'Method']);
+    sheet.getRow(4).font = { bold: true };
+    sheet.getRow(4).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF333333' }
+    };
+    sheet.getRow(4).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+    records.forEach((r) => {
+      sheet.addRow([
+        r.full_name,
+        r.student_number,
+        r.email,
+        new Date(r.marked_at).toLocaleString('en-GB'),
+        r.method
+      ]);
+    });
+
+    sheet.columns = [
+      { width: 25 }, { width: 15 }, { width: 28 },
+      { width: 22 }, { width: 10 }
+    ];
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const safeDateExcel = new Date(session[0].session_date).toISOString().split('T')[0];
+    res.setHeader('Content-Disposition', `attachment; filename=session_${session[0].course_code}_${safeDateExcel}.xlsx`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('Export session Excel error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to export Excel.' });
+  }
+};
+
+const exportSessionAttendancePDF = async (req, res) => {
+  const { session_uuid } = req.params;
+
+  try {
+    const [session] = await pool.query(`
+      SELECT cs.id, cs.session_date, cs.start_time, cs.end_time,
+             c.course_code, c.course_name, c.semester, c.attendance_threshold
+      FROM class_sessions cs
+      JOIN courses c ON cs.course_id = c.id
+      WHERE cs.uuid = ?
+    `, [session_uuid]);
+
+    if (session.length === 0) return res.status(404).json({ success: false, message: 'Session not found.' });
+
+    const [records] = await pool.query(`
+      SELECT u.full_name, u.student_number, u.email,
+             ar.marked_at, ar.method
+      FROM attendance_records ar
+      JOIN users u ON ar.student_id = u.id
+      WHERE ar.session_id = ?
+      ORDER BY u.full_name ASC
+    `, [session[0].id]);
+
+    const doc = new PDFDocument({ margin: 40 });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    const safeDatePDF = new Date(session[0].session_date).toISOString().split('T')[0];
+    res.setHeader('Content-Disposition', `attachment; filename=session_${session[0].course_code}_${safeDatePDF}.pdf`);
+    doc.pipe(res);
+
+    doc.fontSize(18).font('Helvetica-Bold')
+      .text(`${session[0].course_code} — ${session[0].course_name}`, { align: 'center' });
+    doc.fontSize(11).font('Helvetica')
+      .text(`Semester: ${session[0].semester}`, { align: 'center' });
+    doc.text(`Session Date: ${new Date(session[0].session_date).toLocaleDateString('en-GB')} | Time: ${session[0].start_time} - ${session[0].end_time}`, { align: 'center' });
+    doc.text(`Total Attended: ${records.length}`, { align: 'center' });
+    doc.moveDown();
+
+    doc.moveTo(40, doc.y).lineTo(570, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    const tableTop = doc.y;
+    const col = { name: 40, no: 220, email: 310, marked: 430, method: 520 };
+
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.text('Student Name', col.name, tableTop);
+    doc.text('Student No', col.no, tableTop);
+    doc.text('Email', col.email, tableTop);
+    doc.text('Marked At', col.marked, tableTop);
+    doc.text('Method', col.method, tableTop);
+    doc.moveDown(0.5);
+    doc.moveTo(40, doc.y).lineTo(570, doc.y).stroke();
+    doc.moveDown(0.3);
+
+    doc.font('Helvetica').fontSize(9);
+    records.forEach((r) => {
+      const y = doc.y;
+      doc.text(r.full_name, col.name, y, { width: 170 });
+      doc.text(r.student_number || '—', col.no, y);
+      doc.text(r.email, col.email, y, { width: 110 });
+      doc.text(new Date(r.marked_at).toLocaleString('en-GB'), col.marked, y);
+      doc.text(r.method, col.method, y);
+      doc.moveDown(0.6);
+    });
+
+    doc.end();
+  } catch (error) {
+    console.error('Export session PDF error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to export PDF.' });
+  }
+};
+
+module.exports = {
+  exportAttendanceExcel,
+  exportAttendancePDF,
+  exportSessionAttendanceExcel,
+  exportSessionAttendancePDF
+};
