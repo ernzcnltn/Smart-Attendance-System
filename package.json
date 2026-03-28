@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "csv-parser": "^3.2.0",
+    "exceljs": "^4.4.0",
+    "html5-qrcode": "^2.3.8",
+    "pdfkit": "^0.18.0",
+    "react-bootstrap-icons": "^1.11.6",
+    "react-webcam": "^7.2.0"
+  }
+}
