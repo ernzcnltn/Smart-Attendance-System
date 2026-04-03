@@ -1,8 +1,9 @@
-import React, { useRef, useState, useCallback } from 'react';
-import { Container, Card, Button, Alert, Spinner } from 'react-bootstrap';
+import React, { useRef, useState, useEffect } from 'react';
+import { Container, Card, Button, Alert, Spinner, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
 import api from '../../services/api';
+import { checkChallenge } from '../../services/faceService';
 import ScanQR from './ScanQR';
 
 const FaceAttendance = () => {
@@ -11,31 +12,113 @@ const FaceAttendance = () => {
   const [step, setStep] = useState('face');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [capturedImage, setCapturedImage] = useState(null);
+  const [challenge, setChallenge] = useState(null);
+  const [loadingChallenge, setLoadingChallenge] = useState(true);
+  const [detected, setDetected] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const [spoofingModal, setSpoofingModal] = useState(false);
+  const intervalRef = useRef(null);
 
-  const capture = useCallback(() => {
-    const imageSrc = webcamRef.current.getScreenshot();
-    setCapturedImage(imageSrc);
-  }, [webcamRef]);
+  useEffect(() => {
+    fetchChallenge();
+    return () => stopDetection();
+  }, []);
 
-  const handleVerify = async () => {
-    if (!capturedImage) return setError('Please capture your photo first.');
+  useEffect(() => {
+    if (challenge && !detected && !loading) {
+      startDetection();
+    }
+    return () => stopDetection();
+  }, [challenge]);
+
+  const fetchChallenge = async () => {
+    setLoadingChallenge(true);
+    setDetected(false);
+    setError('');
+    stopDetection();
+    try {
+      const response = await api.get('/face/challenge?type=verification');
+      setChallenge(response.data.data.challenge);
+    } catch (err) {
+      setError('Failed to load challenge. Please refresh.');
+    } finally {
+      setLoadingChallenge(false);
+    }
+  };
+
+  const startDetection = () => {
+    stopDetection();
+    intervalRef.current = setInterval(async () => {
+      if (!webcamRef.current || capturing) return;
+      try {
+        const imageSrc = webcamRef.current.getScreenshot();
+        if (!imageSrc || !challenge) return;
+
+        const response = await checkChallenge(imageSrc, challenge.id);
+
+        if (response.detected) {
+          stopDetection();
+          setDetected(true);
+          setCapturing(true);
+          await handleAutoVerify(imageSrc);
+          setCapturing(false);
+        }
+      } catch (err) {}
+    }, 2500);
+  };
+
+  const stopDetection = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  const handleAutoVerify = async (imageSrc) => {
     setLoading(true);
     setError('');
     try {
-      const response = await api.post('/face/verify', { image: capturedImage });
+      const response = await api.post('/face/verify', {
+        image: imageSrc,
+        challenge_id: challenge.id
+      });
+
       if (response.data.data.verified) {
         setStep('qr');
       } else {
         setError('Face verification failed. Please try again.');
-        setCapturedImage(null);
+        setDetected(false);
+        setCapturing(false);
+        await fetchChallenge();
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Face verification failed. Please try again.');
-      setCapturedImage(null);
+      const data = err.response?.data;
+      const message = data?.message || 'Face verification failed.';
+
+      if (
+        message.toLowerCase().includes('liveness') ||
+        message.toLowerCase().includes('real face') ||
+        message.toLowerCase().includes('photo') ||
+        message.toLowerCase().includes('spoof')
+      ) {
+        stopDetection();
+        setSpoofingModal(true);
+      } else {
+        setError(message);
+        setDetected(false);
+        setCapturing(false);
+        await fetchChallenge();
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCloseSpoofingModal = async () => {
+    setSpoofingModal(false);
+    setDetected(false);
+    setCapturing(false);
+    await fetchChallenge();
   };
 
   if (step === 'qr') {
@@ -51,7 +134,7 @@ const FaceAttendance = () => {
 
   return (
     <Container>
-      <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => navigate('/student')}>
+      <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => { stopDetection(); navigate('/student'); }}>
         ← Back
       </Button>
       <Card className="shadow-sm mx-auto" style={{ maxWidth: '500px' }}>
@@ -61,54 +144,79 @@ const FaceAttendance = () => {
         <Card.Body className="text-center">
           {error && <Alert variant="danger">{error}</Alert>}
 
-          <p className="text-muted small mb-3">
-            First, verify your identity with face recognition. Then you will be able to scan the QR code.
-          </p>
-
-          {!capturedImage ? (
-            <>
-              <Webcam
-                ref={webcamRef}
-                screenshotFormat="image/jpeg"
-                className="rounded mb-3"
-                style={{ width: '100%', maxWidth: '400px' }}
-                videoConstraints={{ facingMode: 'user' }}
-                onUserMediaError={() => setError('Camera access denied. Please allow camera permission.')}
-              />
-              <Button variant="primary" className="w-100" onClick={capture}>
-                Capture Photo
-              </Button>
-            </>
-          ) : (
-            <>
-              <img
-                src={capturedImage}
-                alt="Captured"
-                className="rounded mb-3"
-                style={{ width: '100%', maxWidth: '400px' }}
-              />
-              <div className="d-flex gap-2">
-                <Button
-                  variant="outline-secondary"
-                  className="w-50"
-                  onClick={() => setCapturedImage(null)}
-                  disabled={loading}
-                >
-                  Retake
-                </Button>
-                <Button
-                  variant="success"
-                  className="w-50"
-                  onClick={handleVerify}
-                  disabled={loading}
-                >
-                  {loading ? <Spinner size="sm" /> : 'Verify Face'}
-                </Button>
-              </div>
-            </>
+          {loadingChallenge ? (
+            <Spinner animation="border" className="mb-3" />
+          ) : challenge && (
+            <Alert variant={detected ? 'success' : 'info'} className="mb-3">
+              {detected ? (
+                <><strong>✓ Detected!</strong> Verifying...</>
+              ) : (
+                <><strong>Challenge:</strong> {challenge.instruction}</>
+              )}
+            </Alert>
           )}
+
+          {loading && (
+            <Alert variant="warning" className="mb-3">
+              <Spinner size="sm" className="me-2" />
+              Verifying your face...
+            </Alert>
+          )}
+
+          <div style={{ position: 'relative' }}>
+            <Webcam
+              ref={webcamRef}
+              screenshotFormat="image/jpeg"
+              className="rounded mb-3"
+              style={{ width: '100%', maxWidth: '400px' }}
+              videoConstraints={{ facingMode: 'user' }}
+              onUserMediaError={() => setError('Camera access denied.')}
+            />
+            {!detected && !loading && (
+              <div style={{
+                position: 'absolute',
+                bottom: '20px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'rgba(0,0,0,0.6)',
+                color: 'white',
+                padding: '6px 14px',
+                borderRadius: '20px',
+                fontSize: '13px',
+                whiteSpace: 'nowrap'
+              }}>
+                 Detecting...
+              </div>
+            )}
+          </div>
+
+          <p className="text-muted small">
+            Perform the challenge above. Verification will happen automatically.
+          </p>
         </Card.Body>
       </Card>
+
+      <Modal show={spoofingModal} onHide={handleCloseSpoofingModal} centered>
+        <Modal.Header closeButton style={{ background: '#dc3545', color: 'white' }}>
+          <Modal.Title> Spoofing Detected</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="text-center py-4">
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚫</div>
+          <h5>Fraudulent Attempt Detected!</h5>
+          <p className="text-muted">
+            A photo or screen was detected instead of a real face.
+            Please use your actual face for attendance verification.
+          </p>
+          <p className="small text-danger">
+            This attempt has been flagged. Continued attempts may result in disciplinary action.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="danger" className="w-100" onClick={handleCloseSpoofingModal}>
+            I understand, try again with my real face
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 };

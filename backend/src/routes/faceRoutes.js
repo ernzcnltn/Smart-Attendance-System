@@ -5,7 +5,9 @@ const {
   verifyFace,
   getFaceStatus,
   resetFace,
-  resetAllFaces
+  resetAllFaces,
+  getChallenge,
+  checkChallenge
 } = require('../controllers/faceController');
 const { authenticate, authorize } = require('../middleware/auth');
 
@@ -16,5 +18,7 @@ router.post('/verify', authorize('student'), verifyFace);
 router.get('/status', authorize('student'), getFaceStatus);
 router.post('/reset', authorize('admin'), resetFace);
 router.post('/reset-all', authorize('admin'), resetAllFaces);
+router.get('/challenge', getChallenge);
+router.post('/check-challenge', authorize('student'), checkChallenge);
 
 module.exports = router;

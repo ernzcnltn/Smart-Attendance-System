@@ -5,45 +5,64 @@ const { successResponse, errorResponse } = require('../utils/helpers');
 const FACE_SERVICE_URL = process.env.FACE_SERVICE_URL || 'http://localhost:5001';
 
 const registerFace = async (req, res) => {
-  const { image } = req.body;
+  const { image, challenge_id, step } = req.body;
 
-  if (!image) {
-    return errorResponse(res, 'Image is required.', 400);
+  if (!image || !challenge_id) {
+    return errorResponse(res, 'Image and challenge are required.', 400);
   }
 
   try {
     const response = await axios.post(`${FACE_SERVICE_URL}/register`, {
       student_uuid: req.user.uuid,
-      image
+      image,
+      challenge_id,
+      step: step !== undefined ? step : 0
     });
 
-    if (!response.data.success) {
-      return errorResponse(res, response.data.message, 400);
+    console.log('Python response:', response.data);
+
+    const is_complete = response.data.is_complete;
+    const next_step = response.data.next_step;
+
+    console.log('is_complete:', is_complete, 'next_step:', next_step);
+
+    if (is_complete) {
+      await pool.query(
+        'UPDATE users SET face_registered = true, face_registered_at = NOW() WHERE id = ?',
+        [req.user.id]
+      );
     }
 
-    await pool.query(
-      'UPDATE users SET face_registered = true, face_registered_at = NOW() WHERE id = ?',
-      [req.user.id]
-    );
-
-    return successResponse(res, {}, 'Face registered successfully.');
+    return res.status(200).json({
+      success: true,
+      message: response.data.message,
+      data: {
+        is_complete,
+        next_step
+      }
+    });
   } catch (error) {
     console.error('Register face error:', error.message);
+    if (error.response?.data) {
+      return errorResponse(res, error.response.data.message, 400);
+    }
     return errorResponse(res, 'Failed to register face.');
   }
 };
 
-const verifyFace = async (req, res) => {
-  const { image } = req.body;
 
-  if (!image) {
-    return errorResponse(res, 'Image is required.', 400);
+const verifyFace = async (req, res) => {
+  const { image, challenge_id } = req.body;
+
+  if (!image || !challenge_id) {
+    return errorResponse(res, 'Image and challenge are required.', 400);
   }
 
   try {
     const response = await axios.post(`${FACE_SERVICE_URL}/verify`, {
       student_uuid: req.user.uuid,
-      image
+      image,
+      challenge_id
     });
 
     if (!response.data.success) {
@@ -56,6 +75,9 @@ const verifyFace = async (req, res) => {
     }, 'Face verified successfully.');
   } catch (error) {
     console.error('Verify face error:', error.message);
+    if (error.response?.data) {
+      return errorResponse(res, error.response.data.message, 400);
+    }
     return errorResponse(res, 'Failed to verify face.');
   }
 };
@@ -116,11 +138,13 @@ const resetFace = async (req, res) => {
 const resetAllFaces = async (req, res) => {
   try {
     const [students] = await pool.query(
-      'SELECT uuid FROM users WHERE role = "student" AND face_registered = true'
+      'SELECT uuid FROM users WHERE role = "student"'
     );
 
     for (const student of students) {
-      await axios.post(`${FACE_SERVICE_URL}/delete`, { student_uuid: student.uuid });
+      try {
+        await axios.post(`${FACE_SERVICE_URL}/delete`, { student_uuid: student.uuid });
+      } catch (err) {}
     }
 
     await pool.query(
@@ -134,10 +158,58 @@ const resetAllFaces = async (req, res) => {
   }
 };
 
+
+
+const getChallenge = async (req, res) => {
+  const type = req.query.type || 'verification';
+  const step = parseInt(req.query.step) || 0;
+
+  const registrationChallenges = [
+    { id: 'look_straight', instruction: 'Look straight at the camera' },
+    { id: 'turn_left', instruction: 'Please turn your head to the left' },
+    { id: 'turn_right', instruction: 'Please turn your head to the right' }
+  ];
+
+  const verificationChallenges = [
+    { id: 'smile', instruction: 'Please smile at the camera' },
+    { id: 'open_mouth', instruction: 'Please open your mouth' },
+    { id: 'raise_eyebrows', instruction: 'Please raise your eyebrows' }
+  ];
+
+  let challenge;
+  if (type === 'registration') {
+    challenge = registrationChallenges[step % registrationChallenges.length];
+  } else {
+    challenge = verificationChallenges[Math.floor(Math.random() * verificationChallenges.length)];
+  }
+
+  return successResponse(res, { challenge });
+};
+const checkChallenge = async (req, res) => {
+  const { image, challenge_id } = req.body;
+  if (!image || !challenge_id) {
+    return errorResponse(res, 'Image and challenge_id are required.', 400);
+  }
+  try {
+    const response = await axios.post(`${FACE_SERVICE_URL}/check-challenge`, {
+      image,
+      challenge_id
+    });
+    return res.status(200).json({
+      success: true,
+      detected: response.data.detected
+    });
+  } catch (error) {
+    return res.status(200).json({ success: false, detected: false });
+  }
+};
+
 module.exports = {
   registerFace,
   verifyFace,
   getFaceStatus,
   resetFace,
-  resetAllFaces
+  resetAllFaces,
+  getChallenge,
+  checkChallenge
 };
