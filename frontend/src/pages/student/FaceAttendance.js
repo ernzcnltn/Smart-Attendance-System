@@ -16,8 +16,7 @@ const FaceAttendance = () => {
   const [loadingChallenge, setLoadingChallenge] = useState(true);
   const [detected, setDetected] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const [spoofingModal, setSpoofingModal] = useState(false);
-  const intervalRef = useRef(null);
+const [spoofingModal, setSpoofingModal] = useState({ show: false, type: 'spoof' });  const intervalRef = useRef(null);
 
   useEffect(() => {
     fetchChallenge();
@@ -83,43 +82,49 @@ const FaceAttendance = () => {
         challenge_id: challenge.id
       });
 
-      if (response.data.data.verified) {
-        setStep('qr');
-      } else {
-        setError('Face verification failed. Please try again.');
-        setDetected(false);
-        setCapturing(false);
-        await fetchChallenge();
-      }
-    } catch (err) {
+    if (response.data.data.verified) {
+  setStep('qr');
+} else {
+  stopDetection();
+  setSpoofingModal({ show: true, type: 'mismatch' });
+}
+
+     } catch (err) {
       const data = err.response?.data;
       const message = data?.message || 'Face verification failed.';
 
-      if (
-        message.toLowerCase().includes('liveness') ||
-        message.toLowerCase().includes('real face') ||
-        message.toLowerCase().includes('photo') ||
-        message.toLowerCase().includes('spoof')
-      ) {
-        stopDetection();
-        setSpoofingModal(true);
-      } else {
+    if (
+  message.toLowerCase().includes('liveness') ||
+  message.toLowerCase().includes('real face') ||
+  message.toLowerCase().includes('photo') ||
+  message.toLowerCase().includes('spoof')
+) {
+  stopDetection();
+  setSpoofingModal({ show: true, type: 'spoof' });
+} else if (
+  message.toLowerCase().includes('does not match') ||
+  message.toLowerCase().includes('already registered') ||
+  message.toLowerCase().includes('duplicate')
+) {
+  stopDetection();
+  setSpoofingModal({ show: true, type: 'mismatch' });
+} else {
         setError(message);
         setDetected(false);
         setCapturing(false);
         await fetchChallenge();
       }
-    } finally {
+    }finally {
       setLoading(false);
     }
   };
 
   const handleCloseSpoofingModal = async () => {
-    setSpoofingModal(false);
-    setDetected(false);
-    setCapturing(false);
-    await fetchChallenge();
-  };
+  setSpoofingModal({ show: false, type: 'spoof' });
+  setDetected(false);
+  setCapturing(false);
+  await fetchChallenge();
+};
 
   if (step === 'qr') {
     return (
@@ -196,27 +201,32 @@ const FaceAttendance = () => {
         </Card.Body>
       </Card>
 
-      <Modal show={spoofingModal} onHide={handleCloseSpoofingModal} centered>
-        <Modal.Header closeButton style={{ background: '#dc3545', color: 'white' }}>
-          <Modal.Title> Spoofing Detected</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="text-center py-4">
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚫</div>
-          <h5>Fraudulent Attempt Detected!</h5>
-          <p className="text-muted">
-            A photo or screen was detected instead of a real face.
-            Please use your actual face for attendance verification.
-          </p>
-          <p className="small text-danger">
-            This attempt has been flagged. Continued attempts may result in disciplinary action.
-          </p>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="danger" className="w-100" onClick={handleCloseSpoofingModal}>
-            I understand, try again with my real face
-          </Button>
-        </Modal.Footer>
-      </Modal>
+      <Modal show={spoofingModal.show} onHide={handleCloseSpoofingModal} centered>
+  <Modal.Header closeButton style={{ background: '#dc3545', color: 'white' }}>
+    <Modal.Title>
+      {spoofingModal.type === 'spoof' ? 'Spoofing Detected' : 'Identity Mismatch'}
+    </Modal.Title>
+  </Modal.Header>
+  <Modal.Body className="text-center py-4">
+    <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚫</div>
+    <h5>
+      {spoofingModal.type === 'spoof' ? 'Fraudulent Attempt Detected!' : 'Face Does Not Match!'}
+    </h5>
+    <p className="text-muted">
+      {spoofingModal.type === 'spoof'
+        ? 'A photo or screen was detected instead of a real face. Please use your actual face for attendance verification.'
+        : 'Your face does not match the registered face for this account. You can only mark attendance for yourself.'}
+    </p>
+    <p className="small text-danger">
+      This attempt has been flagged. Continued attempts may result in disciplinary action.
+    </p>
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="danger" className="w-100" onClick={handleCloseSpoofingModal}>
+      I understand, try again with my real face
+    </Button>
+  </Modal.Footer>
+</Modal>
     </Container>
   );
 };
