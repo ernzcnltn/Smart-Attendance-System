@@ -74,6 +74,7 @@ const Login = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Email"
                 maxLength={50}
+                minLength={5}
                 required
                 style={{
                   background: 'rgba(255,255,255,0.15)',
@@ -86,7 +87,6 @@ const Login = () => {
                 <PersonFill color="white" size={16} />
               </InputGroup.Text>
             </InputGroup>
-            <small style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Max 50 characters</small>
           </Form.Group>
 
           <Form.Group className="mb-4">
@@ -97,6 +97,7 @@ const Login = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
                 maxLength={15}
+                minLength={6}
                 required
                 style={{
                   background: 'rgba(255,255,255,0.15)',
@@ -117,7 +118,6 @@ const Login = () => {
                 {showPassword ? <EyeSlashFill size={16} /> : <EyeFill size={16} />}
               </Button>
             </InputGroup>
-            <small style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Max 15 characters</small>
           </Form.Group>
 
           <Button

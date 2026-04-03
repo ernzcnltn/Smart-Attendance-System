@@ -14,7 +14,20 @@ export const register = async (data) => {
   return response.data;
 };
 
-export const logout = () => {
+export const logout = async (userRole, userUuid) => {
+  if (userRole === 'student') {
+    const token = localStorage.getItem('token');
+    const apiUrl = process.env.REACT_APP_API_URL;
+    try {
+      await fetch(`${apiUrl}/face/cancel-registration`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+    } catch (e) {}
+  }
   removeToken();
   removeUser();
 };

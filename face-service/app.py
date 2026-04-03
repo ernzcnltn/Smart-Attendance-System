@@ -147,6 +147,51 @@ def register_face():
                 'challenge_failed': True
             }), 400
 
+        # Yüz net görünüyor mu kontrol et
+        try:
+            from deepface import DeepFace as df
+            face_check = df.extract_faces(
+                img_path=img_array,
+                detector_backend='opencv',
+                enforce_detection=True
+            )
+            if len(face_check) == 0:
+                return jsonify({
+                    'success': False,
+                    'message': 'No clear face detected. Please ensure your face is clearly visible.',
+                }), 400
+        except Exception:
+            return jsonify({
+                'success': False,
+                'message': 'No clear face detected. Please ensure your face is clearly visible.',
+            }), 400
+
+        # Tek yüz politikası — sadece ilk adımda kontrol et
+        if step == 0:
+            from deepface import DeepFace
+            existing_files = []
+            for f in os.listdir(FACES_DIR):
+                if f.endswith('.jpg') and not f.startswith(student_uuid):
+                    existing_files.append(os.path.join(FACES_DIR, f))
+
+            for existing_face in existing_files:
+                try:
+                    result = DeepFace.verify(
+                        img1_path=img_array,
+                        img2_path=existing_face,
+                        model_name='Facenet512',
+                        detector_backend='opencv',
+                        enforce_detection=False
+                    )
+                    if result['verified']:
+                        return jsonify({
+                            'success': False,
+                            'message': 'This face is already registered to another account. Each student must register their own face.',
+                            'duplicate_face': True
+                        }), 400
+                except Exception as e:
+                    continue
+
         face_path = os.path.join(FACES_DIR, f'{student_uuid}_{step}.jpg')
         save_image(img, face_path)
 
@@ -264,7 +309,6 @@ def delete_face():
         traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
 
-
 @app.route('/check-challenge', methods=['POST'])
 def check_challenge():
     try:
@@ -285,7 +329,6 @@ def check_challenge():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'detected': False, 'message': str(e)}), 500
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)

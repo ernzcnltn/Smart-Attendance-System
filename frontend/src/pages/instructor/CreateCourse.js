@@ -1,16 +1,24 @@
 import React, { useState } from 'react';
-import { Container, Card, Form, Button, Alert, Spinner } from 'react-bootstrap';
+import { Container, Card, Form, Button, Alert, Spinner, Row, Col } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { createCourse } from '../../services/courseService';
+
+const YEARS = () => {
+  const current = new Date().getFullYear();
+  return [`${current-1}-${current}`, `${current}-${current+1}`, `${current+1}-${current+2}`];
+};
+
+const TERMS = ['Spring', 'Summer', 'Fall'];
 
 const CreateCourse = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     course_code: '',
     course_name: '',
-    semester: '',
     attendance_threshold: 70
   });
+  const [year, setYear] = useState(`${new Date().getFullYear()-1}-${new Date().getFullYear()}`);
+  const [term, setTerm] = useState('Spring');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +29,7 @@ const CreateCourse = () => {
     setError('');
     setLoading(true);
     try {
-      await createCourse(form);
+      await createCourse({ ...form, semester: `${year} ${term}` });
       navigate('/instructor');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create course.');
@@ -62,13 +70,25 @@ const CreateCourse = () => {
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Semester</Form.Label>
-              <Form.Control
-                name="semester"
-                value={form.semester}
-                onChange={handleChange}
-                placeholder="e.g. 2024-2025 Spring"
-                required
-              />
+              <Row className="g-2">
+                <Col>
+                  <Form.Select value={year} onChange={(e) => setYear(e.target.value)}>
+                    {YEARS().map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col>
+                  <Form.Select value={term} onChange={(e) => setTerm(e.target.value)}>
+                    {TERMS.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </Form.Select>
+                </Col>
+              </Row>
+              <Form.Text className="text-muted">
+                Selected: {year} {term}
+              </Form.Text>
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Attendance Threshold (%)</Form.Label>

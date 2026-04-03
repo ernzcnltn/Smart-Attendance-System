@@ -204,6 +204,28 @@ const checkChallenge = async (req, res) => {
   }
 };
 
+const cancelRegistration = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT face_registered FROM users WHERE id = ?',
+      [req.user.id]
+    );
+    
+    if (rows.length > 0 && rows[0].face_registered) {
+      return successResponse(res, {}, 'Face already registered, skipping cancel.');
+    }
+
+    console.log('Cancel registration for:', req.user.uuid);
+    await axios.post(`${FACE_SERVICE_URL}/delete`, {
+      student_uuid: req.user.uuid
+    });
+    return successResponse(res, {}, 'Registration cancelled.');
+  } catch (error) {
+    console.error('Cancel registration error:', error.message);
+    return successResponse(res, {}, 'Registration cancelled.');
+  }
+};
+
 module.exports = {
   registerFace,
   verifyFace,
@@ -211,5 +233,6 @@ module.exports = {
   resetFace,
   resetAllFaces,
   getChallenge,
-  checkChallenge
+  checkChallenge,
+   cancelRegistration
 };

@@ -1,5 +1,5 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { Container, Card, Button, Alert, Spinner, ProgressBar, Badge, Modal } from 'react-bootstrap';
+import React, { useRef, useState, useEffect } from 'react';
+import { Container, Card, Alert, Spinner, ProgressBar, Badge, Modal, Button } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
 import api from '../../services/api';
@@ -22,11 +22,14 @@ const FaceRegister = ({ onComplete }) => {
   const [capturing, setCapturing] = useState(false);
   const [spoofingModal, setSpoofingModal] = useState(false);
   const intervalRef = useRef(null);
+  const registrationComplete = useRef(false);
 
-  useEffect(() => {
-    fetchChallenge(0);
-    return () => stopDetection();
-  }, []);
+useEffect(() => {
+  fetchChallenge(0);
+  return () => {
+    stopDetection();
+  };
+}, []);
 
   useEffect(() => {
     if (challenge && !detected && !loading) {
@@ -68,7 +71,7 @@ const FaceRegister = ({ onComplete }) => {
           setCapturing(false);
         }
       } catch (err) {}
-    }, 2500);
+    }, 3000);
   };
 
   const stopDetection = () => {
@@ -91,6 +94,7 @@ const FaceRegister = ({ onComplete }) => {
       const { is_complete, next_step } = response.data.data;
 
       if (is_complete) {
+        registrationComplete.current = true;
         setSuccess('Face registered successfully!');
         await checkFaceStatus();
         setTimeout(() => {
@@ -113,6 +117,9 @@ const FaceRegister = ({ onComplete }) => {
       ) {
         stopDetection();
         setSpoofingModal(true);
+      } else if (data?.duplicate_face) {
+        stopDetection();
+        setError('This face is already registered to another account. Please use your own face.');
       } else {
         setError(message);
         setDetected(false);

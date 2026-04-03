@@ -7,7 +7,8 @@ const {
   resetFace,
   resetAllFaces,
   getChallenge,
-  checkChallenge
+  checkChallenge,
+  cancelRegistration
 } = require('../controllers/faceController');
 const { authenticate, authorize } = require('../middleware/auth');
 
@@ -20,5 +21,6 @@ router.post('/reset', authorize('admin'), resetFace);
 router.post('/reset-all', authorize('admin'), resetAllFaces);
 router.get('/challenge', getChallenge);
 router.post('/check-challenge', authorize('student'), checkChallenge);
+router.post('/cancel-registration', authorize('student'), cancelRegistration);
 
 module.exports = router;

@@ -299,6 +299,64 @@ const getSessionsByCourse = async (req, res) => {
   }
 };
 
+const getActiveSession = async (req, res) => {
+  const { course_uuid } = req.params;
+  try {
+    const [course] = await pool.query(
+      'SELECT id FROM courses WHERE uuid = ? AND instructor_id = ?',
+      [course_uuid, req.user.id]
+    );
+    if (course.length === 0) return errorResponse(res, 'Course not found.', 404);
+
+    const now = new Date();
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+
+    const [sessions] = await pool.query(
+      `SELECT uuid, qr_token, qr_expires_at, start_time, end_time, session_date
+       FROM class_sessions
+       WHERE course_id = ?
+       AND session_date = ?
+       AND qr_expires_at > NOW()
+       AND is_active = true
+       ORDER BY qr_expires_at DESC
+       LIMIT 1`,
+      [course[0].id, today]
+    );
+
+    if (sessions.length === 0) {
+      return successResponse(res, { has_active: false });
+    }
+
+    const session = sessions[0];
+    const expiresAt = new Date(session.qr_expires_at);
+    const remainingSeconds = Math.max(0, Math.floor((expiresAt - now) / 1000));
+
+    const qrData = JSON.stringify({
+      session_uuid: session.uuid,
+      qr_token: session.qr_token,
+      expires_at: session.qr_expires_at
+    });
+
+    const QRCode = require('qrcode');
+    const qrCodeImage = await QRCode.toDataURL(qrData);
+
+    return successResponse(res, {
+      has_active: true,
+      session_uuid: session.uuid,
+      qr_code: qrCodeImage,
+      qr_token: session.qr_token,
+      expires_at: session.qr_expires_at,
+      remaining_seconds: remainingSeconds,
+      start_time: session.start_time,
+      end_time: session.end_time,
+      session_date: session.session_date
+    });
+  } catch (error) {
+    console.error('Get active session error:', error.message);
+    return errorResponse(res, 'Failed to fetch active session.');
+  }
+};
+
 module.exports = {
   createSession,
   generateQR,
@@ -306,6 +364,7 @@ module.exports = {
   getSessionAttendance,
   getMyAttendance,
   deleteSession,
-    getSessionsByCourse
+    getSessionsByCourse,
+    getActiveSession
 
 };

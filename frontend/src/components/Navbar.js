@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Navbar, Nav, Container, Button, Badge } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
-import { BellFill } from 'react-bootstrap-icons';
+import { BellFill, SunFill, MoonFill } from 'react-bootstrap-icons';
 import { useAuth } from '../context/AuthContext';
 import { logout } from '../services/authService';
 import { getMyNotifications, markNotificationRead } from '../services/attendanceService';
@@ -11,7 +11,15 @@ const AppNavbar = () => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('theme') === 'dark';
+  });
   const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-bs-theme', darkMode ? 'dark' : 'light');
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   useEffect(() => {
     if (user?.role === 'student') {
@@ -47,11 +55,11 @@ const AppNavbar = () => {
     navigate('/student/notifications');
   };
 
-  const handleLogout = () => {
-    logout();
-    logoutContext();
-    navigate('/login');
-  };
+  const handleLogout = async () => {
+  await logout(user?.role, user?.uuid);
+  logoutContext();
+  navigate('/login');
+};
 
   const handleBrandClick = () => {
     if (!user) return navigate('/login');
@@ -69,12 +77,20 @@ const AppNavbar = () => {
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
-    <Navbar bg="dark" variant="dark" expand="lg" className="mb-4">
-      <Container>
+<Navbar
+  variant="dark"
+  expand="lg"
+  className="mb-4"
+  style={{
+    backgroundColor: darkMode ? '#1a1a1a' : '#212529',
+    borderBottom: darkMode ? '1px solid #333' : 'none'
+  }}
+>
+        <Container>
         <Navbar.Brand style={{ cursor: 'pointer' }} onClick={handleBrandClick} className="d-flex align-items-center gap-2">
-  <img src="/logo.png" alt="FIU Logo" height="32" style={{ objectFit: 'contain' }} />
-  <span className="d-none d-md-inline">Smart Attendance System</span>
-</Navbar.Brand>
+          <img src="/logo.png" alt="FIU Logo" height="32" style={{ objectFit: 'contain' }} />
+          <span className="d-none d-md-inline">Smart Attendance System</span>
+        </Navbar.Brand>
 
         <div className="d-flex align-items-center gap-1 ms-auto me-2 order-lg-last">
           {user && (
@@ -82,7 +98,7 @@ const AppNavbar = () => {
           )}
 
           {user?.role === 'student' && (
-<div ref={dropdownRef} style={{ position: 'static' }}>
+            <div ref={dropdownRef} style={{ position: 'relative' }}>
               <Button
                 variant="outline-light"
                 size="sm"
@@ -108,22 +124,22 @@ const AppNavbar = () => {
 
               {showDropdown && (
                 <div
-  style={{
-    position: 'absolute',
-    right: 0,
-    top: '110%',
-    width: '300px',
-    maxWidth: 'calc(100vw - 20px)',
-    maxHeight: '400px',
-    overflowY: 'auto',
-    background: 'white',
-    border: '1px solid #dee2e6',
-    borderRadius: '8px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    zIndex: 9999,
-    color: '#212529'
-  }}
->
+                  style={{
+                    position: 'fixed',
+                    right: '10px',
+                    top: '60px',
+                    width: '300px',
+                    maxWidth: 'calc(100vw - 20px)',
+                    maxHeight: '400px',
+                    overflowY: 'auto',
+                    background: 'var(--bs-body-bg)',
+                    border: '1px solid var(--bs-border-color)',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    zIndex: 9999,
+                    color: 'var(--bs-body-color)'
+                  }}
+                >
                   <div className="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
                     <strong>Notifications</strong>
                     <Button
@@ -136,42 +152,41 @@ const AppNavbar = () => {
                     </Button>
                   </div>
 
-                 {notifications.filter(n => !n.is_read).length === 0 ? (
-  <div className="px-3 py-3 text-muted small">No new notifications</div>
+                  {notifications.filter(n => !n.is_read).length === 0 ? (
+                    <div className="px-3 py-3 small" style={{ color: 'var(--bs-secondary-color)' }}>No new notifications</div>
                   ) : (
-notifications.filter(n => !n.is_read).slice(0, 5).map((n) => (
+                    notifications.filter(n => !n.is_read).slice(0, 5).map((n) => (
                       <div
                         key={n.id}
                         onClick={() => handleNotificationClick(n)}
                         style={{
                           cursor: 'pointer',
                           padding: '10px 16px',
-                          borderBottom: '1px solid #f0f0f0',
-                          backgroundColor: !n.is_read ? '#fff8e1' : 'white',
-                          transition: 'background-color 0.3s'
+                          borderBottom: '1px solid var(--bs-border-color)',
+                          backgroundColor: 'var(--bs-warning-bg-subtle)',
+                          transition: 'background-color 0.2s'
                         }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = !n.is_read ? '#fff8e1' : 'white'}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bs-secondary-bg)'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--bs-warning-bg-subtle)'}
                       >
-                        <p className="mb-1 small" style={{ color: '#212529' }}>{n.message}</p>
+                        <p className="mb-1 small">{n.message}</p>
                         <div className="d-flex justify-content-between align-items-center">
-                          <span style={{ fontSize: '11px', color: '#6c757d' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--bs-secondary-color)' }}>
                             {new Date(n.created_at).toLocaleDateString('en-GB')}
                           </span>
-                          {!n.is_read && (
-                            <Badge bg="warning" text="dark" style={{ fontSize: '10px' }}>New</Badge>
-                          )}
+                          <Badge bg="warning" text="dark" style={{ fontSize: '10px' }}>New</Badge>
                         </div>
                       </div>
                     ))
                   )}
 
-{notifications.filter(n => !n.is_read).length > 5 && (                    <div
+                  {notifications.filter(n => !n.is_read).length > 5 && (
+                    <div
                       className="text-center py-2 small text-primary"
                       style={{ cursor: 'pointer' }}
                       onClick={() => { setShowDropdown(false); navigate('/student/notifications'); }}
                     >
-                      View all {notifications.length} notifications
+                      View all {notifications.filter(n => !n.is_read).length} notifications
                     </div>
                   )}
                 </div>
@@ -184,6 +199,14 @@ notifications.filter(n => !n.is_read).slice(0, 5).map((n) => (
               {user.role !== 'student' && (
                 <Badge bg={roleBadgeColor[user.role]} className="d-none d-lg-inline">{user.role}</Badge>
               )}
+              <Button
+                variant="outline-light"
+                size="sm"
+                onClick={() => setDarkMode(!darkMode)}
+                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {darkMode ? <SunFill size={16} /> : <MoonFill size={16} />}
+              </Button>
               <Button variant="outline-light" size="sm" onClick={handleLogout}>Logout</Button>
             </>
           )}
@@ -198,7 +221,7 @@ notifications.filter(n => !n.is_read).slice(0, 5).map((n) => (
                   <>
                     <Nav.Link as={Link} to="/student">Dashboard</Nav.Link>
                     <Nav.Link as={Link} to="/student/attendance">My Attendance</Nav.Link>
-    <Nav.Link as={Link} to="/student/face-attendance">Take Attendance</Nav.Link>
+                    <Nav.Link as={Link} to="/student/face-attendance">Take Attendance</Nav.Link>
                   </>
                 )}
                 {user.role === 'instructor' && (

@@ -29,3 +29,13 @@ export const getSessionsByCourse = async (course_uuid) => {
   const response = await api.get(`/sessions/course/${course_uuid}`);
   return response.data.data;
 };
+
+export const getActiveSession = async (course_uuid) => {
+  const response = await api.get(`/sessions/course/${course_uuid}/active`);
+  return response.data.data;
+};
+
+export const deleteSession = async (session_uuid) => {
+  const response = await api.delete(`/sessions/${session_uuid}`);
+  return response.data;
+};

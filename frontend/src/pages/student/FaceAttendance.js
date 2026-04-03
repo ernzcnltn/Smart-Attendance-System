@@ -64,7 +64,7 @@ const FaceAttendance = () => {
           setCapturing(false);
         }
       } catch (err) {}
-    }, 2500);
+    }, 3000);
   };
 
   const stopDetection = () => {
