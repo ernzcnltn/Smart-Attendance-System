@@ -11,15 +11,15 @@ const AppNavbar = () => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem('theme') === 'dark';
-  });
+ const [darkMode, setDarkMode] = useState(() => {
+  return sessionStorage.getItem('theme') === 'dark';
+});
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-bs-theme', darkMode ? 'dark' : 'light');
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
+  document.documentElement.setAttribute('data-bs-theme', darkMode ? 'dark' : 'light');
+  sessionStorage.setItem('theme', darkMode ? 'dark' : 'light');
+}, [darkMode]);
 
   useEffect(() => {
     if (user?.role === 'student') {

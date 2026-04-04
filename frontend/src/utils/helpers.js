@@ -1,17 +1,17 @@
-export const getToken = () => localStorage.getItem('token');
+export const getToken = () => sessionStorage.getItem('token');
 
-export const setToken = (token) => localStorage.setItem('token', token);
+export const setToken = (token) => sessionStorage.setItem('token', token);
 
-export const removeToken = () => localStorage.removeItem('token');
+export const removeToken = () => sessionStorage.removeItem('token');
 
 export const getUser = () => {
-  const user = localStorage.getItem('user');
+  const user = sessionStorage.getItem('user');
   return user ? JSON.parse(user) : null;
 };
 
-export const setUser = (user) => localStorage.setItem('user', JSON.stringify(user));
+export const setUser = (user) => sessionStorage.setItem('user', JSON.stringify(user));
 
-export const removeUser = () => localStorage.removeItem('user');
+export const removeUser = () => sessionStorage.removeItem('user');
 
 export const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('en-GB', {
