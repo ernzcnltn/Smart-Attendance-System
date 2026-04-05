@@ -100,7 +100,7 @@ useEffect(() => {
         setTimeout(() => {
           if (onComplete) onComplete();
           else navigate('/student');
-        }, 2000);
+        }, 3000);
       } else {
         setCurrentStep(next_step);
         await fetchChallenge(next_step);
@@ -116,13 +116,17 @@ useEffect(() => {
         message.toLowerCase().includes('spoof')
       ) {
         stopDetection();
-        setSpoofingModal(true);
-      } else if (data?.duplicate_face) {
-        stopDetection();
-        setError('This face is already registered to another account. Please use your own face.');
-      } else {
-        setError(message);
-        setDetected(false);
+         setSpoofingModal(true);
+  } else if (data?.duplicate_face) {
+    stopDetection();
+    setError('This face is already registered to another account. Please use your own face.');
+  } else if (data?.face_covered) {
+    setError(message);
+    setDetected(false);
+    startDetection();
+  } else {
+    setError(message);
+    setDetected(false);
         startDetection();
       }
     } finally {

@@ -16,7 +16,7 @@ export const register = async (data) => {
 
 export const logout = async (userRole, userUuid) => {
   if (userRole === 'student') {
-    const token = localStorage.getItem('token');
+const token = sessionStorage.getItem('token');
     const apiUrl = process.env.REACT_APP_API_URL;
     try {
       await fetch(`${apiUrl}/face/cancel-registration`, {

@@ -59,6 +59,33 @@ def check_liveness(img_array):
         print(f'Liveness error: {e}')
         return False, str(e)
 
+def check_face_coverage(img_array):
+    try:
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+
+        faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(80, 80))
+        if len(faces) == 0:
+            return False, 'No face detected. Please position your face clearly.'
+
+        (x, y, w, h) = faces[0]
+
+        face_area = w * h
+        img_area = img_array.shape[1] * img_array.shape[0]
+        face_ratio = face_area / img_area
+        if face_ratio < 0.06:
+            return False, 'Please move closer to the camera.'
+
+        roi_gray = gray[y:y+h//2, x:x+w]
+        eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 5)
+        if len(eyes) < 2:
+            return False, 'Your face appears to be partially covered. Please ensure your face is fully visible.'
+
+        return True, 'OK'
+    except Exception as e:
+        return False, str(e)
+
 def detect_challenge(img_array, challenge_id):
     try:
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
@@ -72,39 +99,73 @@ def detect_challenge(img_array, challenge_id):
         face_center_x = x + w // 2
         img_width = img_array.shape[1]
         img_center_x = img_width // 2
+        face_area = w * h
+        img_area = img_width * img_array.shape[0]
+        face_ratio = face_area / img_area
 
         if challenge_id == 'look_straight':
             offset = abs(face_center_x - img_center_x) / img_width
-            return offset < 0.15
+            return offset < 0.2 and face_ratio > 0.06
 
         elif challenge_id == 'turn_left':
-            return face_center_x < img_center_x - img_width * 0.05
+            return face_center_x < img_center_x - img_width * 0.08 and face_ratio > 0.06
 
         elif challenge_id == 'turn_right':
-            return face_center_x > img_center_x + img_width * 0.05
+            return face_center_x > img_center_x + img_width * 0.08 and face_ratio > 0.06
 
         elif challenge_id == 'smile':
             smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_smile.xml')
             roi_gray = gray[y:y+h, x:x+w]
             smiles = smile_cascade.detectMultiScale(roi_gray, 1.8, 20)
-            return len(smiles) > 0
+            return len(smiles) > 0 and face_ratio > 0.06
 
         elif challenge_id == 'open_mouth':
             smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_smile.xml')
             roi_gray = gray[y:y+h, x:x+w]
             smiles = smile_cascade.detectMultiScale(roi_gray, 1.5, 10)
-            return len(smiles) > 0
+            return len(smiles) > 0 and face_ratio > 0.06
 
         elif challenge_id == 'raise_eyebrows':
             eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
             roi_gray = gray[y:y+h//2, x:x+w]
             eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 5)
-            return len(eyes) >= 2
+            return len(eyes) >= 2 and face_ratio > 0.06
 
         return False
     except Exception as e:
         print(f'Challenge detection error: {e}')
         return False
+
+def check_duplicate_face(img_array, student_uuid):
+    from deepface import DeepFace
+    existing_files = []
+    for f in os.listdir(FACES_DIR):
+        if f.endswith('.jpg') and not f.startswith(student_uuid):
+            existing_files.append(os.path.join(FACES_DIR, f))
+
+    for existing_face in existing_files:
+        try:
+            result = DeepFace.verify(
+                img1_path=img_array,
+                img2_path=existing_face,
+                model_name='Facenet512',
+                detector_backend='opencv',
+                enforce_detection=False
+            )
+            if result['verified']:
+                return True
+        except Exception:
+            continue
+    return False
+
+def delete_student_faces(student_uuid):
+    for i in range(len(REGISTRATION_CHALLENGES)):
+        face_path = os.path.join(FACES_DIR, f'{student_uuid}_{i}.jpg')
+        if os.path.exists(face_path):
+            os.remove(face_path)
+    old_path = os.path.join(FACES_DIR, f'{student_uuid}.jpg')
+    if os.path.exists(old_path):
+        os.remove(old_path)
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -139,6 +200,10 @@ def register_face():
         if not is_live:
             return jsonify({'success': False, 'message': liveness_message, 'liveness_failed': True}), 400
 
+        is_clear, coverage_message = check_face_coverage(img_array)
+        if not is_clear:
+            return jsonify({'success': False, 'message': coverage_message, 'face_covered': True}), 400
+
         challenge_passed = detect_challenge(img_array, challenge_id)
         if not challenge_passed:
             return jsonify({
@@ -147,7 +212,6 @@ def register_face():
                 'challenge_failed': True
             }), 400
 
-        # Yüz net görünüyor mu kontrol et
         try:
             from deepface import DeepFace as df
             face_check = df.extract_faces(
@@ -166,31 +230,14 @@ def register_face():
                 'message': 'No clear face detected. Please ensure your face is clearly visible.',
             }), 400
 
-        # Tek yüz politikası — sadece ilk adımda kontrol et
-        if step == 0:
-            from deepface import DeepFace
-            existing_files = []
-            for f in os.listdir(FACES_DIR):
-                if f.endswith('.jpg') and not f.startswith(student_uuid):
-                    existing_files.append(os.path.join(FACES_DIR, f))
-
-            for existing_face in existing_files:
-                try:
-                    result = DeepFace.verify(
-                        img1_path=img_array,
-                        img2_path=existing_face,
-                        model_name='Facenet512',
-                        detector_backend='opencv',
-                        enforce_detection=False
-                    )
-                    if result['verified']:
-                        return jsonify({
-                            'success': False,
-                            'message': 'This face is already registered to another account. Each student must register their own face.',
-                            'duplicate_face': True
-                        }), 400
-                except Exception as e:
-                    continue
+        is_duplicate = check_duplicate_face(img_array, student_uuid)
+        if is_duplicate:
+            delete_student_faces(student_uuid)
+            return jsonify({
+                'success': False,
+                'message': 'This face is already registered to another account. Each student must register their own face.',
+                'duplicate_face': True
+            }), 400
 
         face_path = os.path.join(FACES_DIR, f'{student_uuid}_{step}.jpg')
         save_image(img, face_path)
@@ -293,15 +340,7 @@ def delete_face():
         if not student_uuid:
             return jsonify({'success': False, 'message': 'Student UUID is required.'}), 400
 
-        for i in range(len(REGISTRATION_CHALLENGES)):
-            face_path = os.path.join(FACES_DIR, f'{student_uuid}_{i}.jpg')
-            if os.path.exists(face_path):
-                os.remove(face_path)
-
-        old_path = os.path.join(FACES_DIR, f'{student_uuid}.jpg')
-        if os.path.exists(old_path):
-            os.remove(old_path)
-
+        delete_student_faces(student_uuid)
         return jsonify({'success': True, 'message': 'Face deleted successfully.'})
 
     except Exception as e:
