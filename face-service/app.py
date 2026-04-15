@@ -102,16 +102,19 @@ def detect_challenge(img_array, challenge_id):
         face_area = w * h
         img_area = img_width * img_array.shape[0]
         face_ratio = face_area / img_area
+        aspect_ratio = w / h
 
         if challenge_id == 'look_straight':
             offset = abs(face_center_x - img_center_x) / img_width
             return offset < 0.2 and face_ratio > 0.06
 
         elif challenge_id == 'turn_left':
-            return face_center_x < img_center_x - img_width * 0.08 and face_ratio > 0.06
+            center_offset = (face_center_x - img_center_x) / img_width
+            return (center_offset < -0.05 or aspect_ratio < 0.03) and face_ratio > 0.06
 
         elif challenge_id == 'turn_right':
-            return face_center_x > img_center_x + img_width * 0.08 and face_ratio > 0.06
+            center_offset = (face_center_x - img_center_x) / img_width
+            return (center_offset > 0.05 or aspect_ratio < 0.03) and face_ratio > 0.06
 
         elif challenge_id == 'smile':
             smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_smile.xml')

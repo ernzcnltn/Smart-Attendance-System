@@ -39,6 +39,9 @@ app.use('/api/', generalLimiter);
 const authRoutes = require('./routes/authRoutes');
 app.use('/api/auth', authRoutes);
 
+const passport = require('./config/passport');
+app.use(passport.initialize());
+
 const courseRoutes = require('./routes/courseRoutes');
 app.use('/api/courses', courseRoutes);
 

@@ -1,17 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, Alert, Spinner, ProgressBar, Badge, Button } from 'react-bootstrap';
-import { CameraFill, ClipboardDataFill, PersonCheckFill, ExclamationTriangleFill, CheckCircleFill } from 'react-bootstrap-icons';
+import { Container, Row, Col, Card, Alert, Spinner, Button } from 'react-bootstrap';
+import { CameraFill, ClipboardDataFill, PersonCheckFill, ExclamationTriangleFill } from 'react-bootstrap-icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getMyCourses } from '../../services/courseService';
-import { getMyAttendance } from '../../services/sessionService';
-import { getMyNotifications } from '../../services/attendanceService';
+import { getMyNotifications, getMyAttendanceStats } from '../../services/attendanceService';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, ResponsiveContainer
+} from 'recharts';
+
+
+
+const COLORS = ['#c0392b', '#0f3460', '#533483', '#198754', '#ffc107', '#0dcaf0'];
 
 const StudentDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
-  const [attendance, setAttendance] = useState([]);
+  const [attendanceStats, setAttendanceStats] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -19,13 +26,13 @@ const StudentDashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [c, a, n] = await Promise.all([
+        const [c, s, n] = await Promise.all([
           getMyCourses(),
-          getMyAttendance(),
+          getMyAttendanceStats(),
           getMyNotifications()
         ]);
         setCourses(c);
-        setAttendance(a);
+        setAttendanceStats(s);
         setNotifications(n);
       } catch (err) {
         setError('Failed to load dashboard data.');
@@ -36,19 +43,19 @@ const StudentDashboard = () => {
     fetchData();
   }, []);
 
-  const getCourseStats = (course_code) => {
-    const records = attendance.filter(a => a.course_code === course_code);
-    return records.length;
-  };
-
-  const recentAttendance = attendance.slice(0, 5);
+  const totalAttendances = attendanceStats.reduce((acc, s) => acc + s.attended_sessions, 0);
   const unreadCount = notifications.filter(n => !n.is_read).length;
-  const atRiskCount = courses.filter(c => {
-    const attended = getCourseStats(c.course_code);
-    const total = attended;
-    if (total === 0) return false;
-    return (attended / total) * 100 < (c.attendance_threshold || 70);
-  }).length;
+
+  const lineData = attendanceStats.map(s => ({
+    course: s.course_code,
+    percentage: s.percentage,
+    threshold: s.threshold
+  }));
+
+  const pieData = attendanceStats.map(s => ({
+  name: s.course_code,
+  value: s.percentage
+}));
 
   if (loading) return <Container className="text-center mt-5"><Spinner animation="border" /></Container>;
 
@@ -57,14 +64,24 @@ const StudentDashboard = () => {
       {error && <Alert variant="danger">{error}</Alert>}
 
       {/* Header */}
-      <div className="mb-4 pb-3 border-bottom">
-        <h4 className="mb-0">Welcome back, <strong>{user?.full_name}</strong></h4>
-        <p className="text-muted mt-1 mb-0 small">
-          {new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        </p>
+      <div className="d-flex justify-content-between align-items-start mb-4 pb-3 border-bottom">
+        <div>
+          <h4 className="mb-0">Welcome back, <strong>{user?.full_name}</strong></h4>
+          <p className="text-muted mt-1 mb-0 small">
+            {new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
+        </div>
+        <Button
+          variant="danger"
+          className="d-flex align-items-center gap-2"
+          onClick={() => navigate('/student/face-attendance')}
+        >
+          <CameraFill size={16} />
+          <span className="d-none d-sm-inline">Take Attendance</span>
+        </Button>
       </div>
 
-      {/* Stats Row */}
+      {/* Stats */}
       <Row className="mb-4 g-3">
         <Col md={4}>
           <Card className="shadow-sm border-0 h-100" style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)' }}>
@@ -86,14 +103,18 @@ const StudentDashboard = () => {
                 <ClipboardDataFill size={28} color="white" />
               </div>
               <div>
-                <h2 className="mb-0 text-white">{attendance.length}</h2>
+                <h2 className="mb-0 text-white">{totalAttendances}</h2>
                 <p className="mb-0 small" style={{ color: 'rgba(255,255,255,0.7)' }}>Total Attendances</p>
               </div>
             </Card.Body>
           </Card>
         </Col>
         <Col md={4}>
-          <Card className="shadow-sm border-0 h-100" style={{ background: unreadCount > 0 ? 'linear-gradient(135deg, #c0392b, #e74c3c)' : 'linear-gradient(135deg, #1e3c72, #2a5298)' }}>
+          <Card
+            className="shadow-sm border-0 h-100"
+            style={{ background: unreadCount > 0 ? 'linear-gradient(135deg, #c0392b, #e74c3c)' : 'linear-gradient(135deg, #1e3c72, #2a5298)', cursor: unreadCount > 0 ? 'pointer' : 'default' }}
+            onClick={() => unreadCount > 0 && navigate('/student/notifications')}
+          >
             <Card.Body className="d-flex align-items-center gap-3 py-4">
               <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '14px' }}>
                 <ExclamationTriangleFill size={28} color="white" />
@@ -107,117 +128,81 @@ const StudentDashboard = () => {
         </Col>
       </Row>
 
-      {/* Quick Action */}
-      <Row className="mb-4">
-        <Col>
-          <Card
-            className="shadow-sm border-0"
-            style={{ background: 'linear-gradient(135deg, #c0392b, #922b21)', cursor: 'pointer' }}
-            onClick={() => navigate('/student/face-attendance')}
-          >
-            <Card.Body className="d-flex align-items-center justify-content-between py-4 px-4">
-              <div className="d-flex align-items-center gap-3">
-                <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: '12px', padding: '14px' }}>
-                  <CameraFill size={32} color="white" />
-                </div>
-                <div>
-                  <h5 className="mb-1 text-white">Take Attendance</h5>
-                  <p className="mb-0 small" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                    Verify your identity and scan the QR code to mark attendance
-                  </p>
-                </div>
-              </div>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '24px' }}>→</div>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
+      {/* Charts */}
+      {courses.length > 0 ? (
+        <Row className="mb-4 g-3">
+          <Col md={7}>
+            <Card className="shadow-sm border-0 h-100">
+              <Card.Header className="border-bottom py-3">
+                <strong>Attendance Percentage by Course</strong>
+              </Card.Header>
+              <Card.Body>
+                {lineData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={lineData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="course" />
+                      <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} />
+                      <Tooltip formatter={(value) => `${value}%`} />
+                      <Legend />
+                      <Line type="monotone" dataKey="percentage" stroke="#c0392b" strokeWidth={2} name="Attendance %" dot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="threshold" stroke="#ffc107" strokeWidth={2} strokeDasharray="5 5" name="Threshold %" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-muted text-center py-4">No session data yet.</p>
+                )}
+              </Card.Body>
+            </Card>
+          </Col>
 
-      <Row>
-        {/* My Courses */}
-        <Col md={7} className="mb-4">
-          <Card className="shadow-sm border-0 h-100">
-<Card.Header className="border-bottom d-flex justify-content-between align-items-center py-3">              <strong>My Courses</strong>
-              <Button variant="outline-secondary" size="sm" onClick={() => navigate('/student/attendance')}>
-                View Attendance
-              </Button>
-            </Card.Header>
-            <Card.Body>
-              {courses.length === 0 ? (
-                <p className="text-muted">No courses enrolled.</p>
-              ) : (
-                courses.map((c, i) => {
-                  const attended = getCourseStats(c.course_code);
-                  return (
-                    <div key={i} className={`mb-4 ${i < courses.length - 1 ? 'pb-4 border-bottom' : ''}`}>
-                      <div className="d-flex justify-content-between align-items-start mb-2">
-                        <div>
-                          <span className="fw-bold">{c.course_code}</span>
-                          <span className="text-muted ms-2 small">{c.course_name}</span>
-                          <div className="text-muted small mt-1">{c.instructor_name} · {c.semester}</div>
-                        </div>
-                        {attended > 0 && (
-                          <Badge bg="success" className="d-flex align-items-center gap-1">
-                            <CheckCircleFill size={10} /> {attended} sessions
-                          </Badge>
-                        )}
-                      </div>
-                      {attended > 0 && (
-                        <ProgressBar
-                          now={100}
-                          variant="success"
-                          style={{ height: '6px', borderRadius: '4px' }}
-                        />
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-
-        {/* Recent Attendance */}
-        <Col md={5} className="mb-4">
-          <Card className="shadow-sm border-0 h-100">
-<Card.Header className="border-bottom py-3">              <strong>Recent Attendance</strong>
-            </Card.Header>
-            <Card.Body className="p-0">
-              {recentAttendance.length === 0 ? (
-                <p className="text-muted p-3">No attendance records yet.</p>
-              ) : (
-                recentAttendance.map((a, i) => (
-                  <div
-                    key={i}
-                    className="d-flex justify-content-between align-items-center px-3 py-3"
-                    style={{ borderBottom: i < recentAttendance.length - 1 ? '1px solid #f0f0f0' : 'none' }}
-                  >
-                    <div>
-                      <div className="fw-bold small">{a.course_code}</div>
-                      <div className="text-muted" style={{ fontSize: '12px' }}>
-                        {new Date(a.session_date).toLocaleDateString('en-GB')} · {a.start_time}
-                      </div>
-                    </div>
-                    <Badge bg="dark" className="text-uppercase" style={{ fontSize: '10px' }}>{a.method}</Badge>
-                  </div>
-                ))
-              )}
-              {attendance.length > 5 && (
-                <div className="p-3">
-                  <Button
-                    variant="outline-primary"
-                    size="sm"
-                    className="w-100"
-                    onClick={() => navigate('/student/attendance')}
-                  >
-                    View All Records
-                  </Button>
-                </div>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
+        <Col md={5}>
+  <Card className="shadow-sm border-0 h-100">
+    <Card.Header className="border-bottom py-3">
+      <strong>Attendance Distribution</strong>
+    </Card.Header>
+   <Card.Body className="d-flex flex-column align-items-center justify-content-center">
+  <ResponsiveContainer width="100%" height={200}>
+    <PieChart>
+      <Pie
+        data={pieData.map(d => ({ ...d, value: d.value === 0 ? 0.1 : d.value }))}
+        cx="50%"
+        cy="50%"
+        outerRadius={80}
+        dataKey="value"
+        label={false}
+      >
+        {pieData.map((entry, index) => (
+          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+        ))}
+      </Pie>
+      <Tooltip formatter={(value, name) => {
+        const real = pieData.find(d => d.name === name);
+        return [`${real ? real.value : value}%`, name];
+      }} />
+    </PieChart>
+  </ResponsiveContainer>
+  <div className="d-flex flex-wrap justify-content-center gap-2 mt-2">
+    {pieData.map((entry, index) => (
+      <div key={index} className="d-flex align-items-center gap-1">
+        <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: COLORS[index % COLORS.length] }} />
+        <small>{entry.name}: {entry.value}%</small>
+      </div>
+    ))}
+  </div>
+</Card.Body>
+  </Card>
+</Col>
+        </Row>
+      ) : (
+        <Card className="shadow-sm border-0 mb-4">
+          <Card.Body className="text-center py-5">
+            <ClipboardDataFill size={48} className="text-muted mb-3" />
+            <h5 className="text-muted">No courses enrolled yet</h5>
+            <p className="text-muted small">Your attendance charts will appear here once you are enrolled in courses.</p>
+          </Card.Body>
+        </Card>
+      )}
     </Container>
   );
 };

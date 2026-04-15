@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Navbar, Nav, Container, Button, Badge } from 'react-bootstrap';
+import { Badge, Button } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
-import { BellFill, SunFill, MoonFill } from 'react-bootstrap-icons';
+import {
+  BellFill, SunFill, MoonFill, List, X,
+  HouseFill, ClipboardDataFill, PersonFill,
+  CameraFill, BoxArrowRight, BookFill
+} from 'react-bootstrap-icons';
 import { useAuth } from '../context/AuthContext';
 import { logout } from '../services/authService';
 import { getMyNotifications, markNotificationRead } from '../services/attendanceService';
@@ -10,16 +14,17 @@ const AppNavbar = () => {
   const { user, logout: logoutContext } = useAuth();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
-  const [showDropdown, setShowDropdown] = useState(false);
- const [darkMode, setDarkMode] = useState(() => {
-  return sessionStorage.getItem('theme') === 'dark';
-});
-  const dropdownRef = useRef(null);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    return sessionStorage.getItem('theme') === 'dark';
+  });
+  const notificationRef = useRef(null);
 
   useEffect(() => {
-  document.documentElement.setAttribute('data-bs-theme', darkMode ? 'dark' : 'light');
-  sessionStorage.setItem('theme', darkMode ? 'dark' : 'light');
-}, [darkMode]);
+    document.documentElement.setAttribute('data-bs-theme', darkMode ? 'dark' : 'light');
+    sessionStorage.setItem('theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   useEffect(() => {
     if (user?.role === 'student') {
@@ -31,8 +36,8 @@ const AppNavbar = () => {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setShowDropdown(false);
+      if (notificationRef.current && !notificationRef.current.contains(e.target)) {
+        setShowNotifications(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -51,15 +56,15 @@ const AppNavbar = () => {
       await markNotificationRead(n.id);
       setNotifications(notifications.map(notif => notif.id === n.id ? { ...notif, is_read: 1 } : notif));
     }
-    setShowDropdown(false);
+    setShowNotifications(false);
     navigate('/student/notifications');
   };
 
   const handleLogout = async () => {
-  await logout(user?.role, user?.uuid);
-  logoutContext();
-  navigate('/login');
-};
+    await logout(user?.role);
+    logoutContext();
+    navigate('/login');
+  };
 
   const handleBrandClick = () => {
     if (!user) return navigate('/login');
@@ -68,63 +73,81 @@ const AppNavbar = () => {
     if (user.role === 'admin') return navigate('/admin');
   };
 
-  const roleBadgeColor = {
-    admin: 'danger',
-    instructor: 'primary',
-    student: 'success'
-  };
-
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
+  const studentLinks = [
+    { to: '/student', icon: <HouseFill size={18} />, label: 'Dashboard' },
+    { to: '/student/courses', icon: <BookFill size={18} />, label: 'My Courses' },
+    { to: '/student/attendance', icon: <ClipboardDataFill size={18} />, label: 'My Attendance' },
+    { to: '/student/face-attendance', icon: <CameraFill size={18} />, label: 'Take Attendance' },
+    { to: '/student/profile', icon: <PersonFill size={18} />, label: 'Profile' },
+  ];
+
+  const instructorLinks = [
+    { to: '/instructor', icon: <HouseFill size={18} />, label: 'Dashboard' },
+  ];
+
+  const adminLinks = [
+    { to: '/admin', icon: <HouseFill size={18} />, label: 'Dashboard' },
+  ];
+
+  const links = user?.role === 'student' ? studentLinks : user?.role === 'instructor' ? instructorLinks : adminLinks;
+
   return (
-<Navbar
-  variant="dark"
-  expand="lg"
-  className="mb-4"
-  style={{
-    backgroundColor: darkMode ? '#1a1a1a' : '#212529',
-    borderBottom: darkMode ? '1px solid #333' : 'none'
-  }}
->
-        <Container>
-        <Navbar.Brand style={{ cursor: 'pointer' }} onClick={handleBrandClick} className="d-flex align-items-center gap-2">
-          <img src="/logo.png" alt="FIU Logo" height="32" style={{ objectFit: 'contain' }} />
-          <span className="d-none d-md-inline">Smart Attendance System</span>
-        </Navbar.Brand>
-
-        <div className="d-flex align-items-center gap-1 ms-auto me-2 order-lg-last">
+    <>
+      {/* Navbar */}
+      <nav
+        className="mb-4 px-3 d-flex align-items-center justify-content-between"
+        style={{
+          height: '60px',
+          backgroundColor: darkMode ? '#1a1a1a' : '#212529',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1000
+        }}
+      >
+        {/* Sol: Hamburger + Logo */}
+        <div className="d-flex align-items-center gap-3">
           {user && (
-            <span className="text-light d-none d-lg-inline me-1">{user.full_name}</span>
+            <Button
+              variant="link"
+              className="p-0 text-white"
+              onClick={() => setShowSidebar(true)}
+            >
+              <List size={26} />
+            </Button>
           )}
+          <div
+            style={{ cursor: 'pointer' }}
+            onClick={handleBrandClick}
+            className="d-flex align-items-center gap-2"
+          >
+            <img src="/logo.png" alt="FIU Logo" height="32" style={{ objectFit: 'contain' }} />
+            <span className="text-white fw-semibold d-none d-md-inline">Smart Attendance System</span>
+          </div>
+        </div>
 
+        {/* Sağ: Bildirim + Dark Mode + Logout */}
+        <div className="d-flex align-items-center gap-2">
           {user?.role === 'student' && (
-            <div ref={dropdownRef} style={{ position: 'relative' }}>
-              <Button
-                variant="outline-light"
-                size="sm"
-                style={{ position: 'relative' }}
-                onClick={() => setShowDropdown(!showDropdown)}
-              >
-                <BellFill size={16} />
-                {unreadCount > 0 && (
-                  <Badge
-                    bg="danger"
-                    pill
-                    style={{
-                      position: 'absolute',
-                      top: '-6px',
-                      right: '-6px',
-                      fontSize: '10px'
-                    }}
-                  >
-                    {unreadCount}
-                  </Badge>
-                )}
-              </Button>
+            <>
+              <div ref={notificationRef} style={{ position: 'relative' }}>
+                <Button
+                  variant="outline-light"
+                  size="sm"
+                  style={{ position: 'relative' }}
+                  onClick={() => setShowNotifications(!showNotifications)}
+                >
+                  <BellFill size={16} />
+                  {unreadCount > 0 && (
+                    <Badge bg="danger" pill style={{ position: 'absolute', top: '-6px', right: '-6px', fontSize: '10px' }}>
+                      {unreadCount}
+                    </Badge>
+                  )}
+                </Button>
 
-              {showDropdown && (
-                <div
-                  style={{
+                {showNotifications && (
+                  <div style={{
                     position: 'fixed',
                     right: '10px',
                     top: '60px',
@@ -138,107 +161,175 @@ const AppNavbar = () => {
                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                     zIndex: 9999,
                     color: 'var(--bs-body-color)'
-                  }}
-                >
-                  <div className="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
-                    <strong>Notifications</strong>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="p-0"
-                      onClick={() => { setShowDropdown(false); navigate('/student/notifications'); }}
-                    >
-                      View all
-                    </Button>
-                  </div>
-
-                  {notifications.filter(n => !n.is_read).length === 0 ? (
-                    <div className="px-3 py-3 small" style={{ color: 'var(--bs-secondary-color)' }}>No new notifications</div>
-                  ) : (
-                    notifications.filter(n => !n.is_read).slice(0, 5).map((n) => (
-                      <div
-                        key={n.id}
-                        onClick={() => handleNotificationClick(n)}
-                        style={{
-                          cursor: 'pointer',
-                          padding: '10px 16px',
-                          borderBottom: '1px solid var(--bs-border-color)',
-                          backgroundColor: 'var(--bs-warning-bg-subtle)',
-                          transition: 'background-color 0.2s'
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bs-secondary-bg)'}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--bs-warning-bg-subtle)'}
-                      >
-                        <p className="mb-1 small">{n.message}</p>
-                        <div className="d-flex justify-content-between align-items-center">
-                          <span style={{ fontSize: '11px', color: 'var(--bs-secondary-color)' }}>
-                            {new Date(n.created_at).toLocaleDateString('en-GB')}
-                          </span>
-                          <Badge bg="warning" text="dark" style={{ fontSize: '10px' }}>New</Badge>
-                        </div>
-                      </div>
-                    ))
-                  )}
-
-                  {notifications.filter(n => !n.is_read).length > 5 && (
-                    <div
-                      className="text-center py-2 small text-primary"
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => { setShowDropdown(false); navigate('/student/notifications'); }}
-                    >
-                      View all {notifications.filter(n => !n.is_read).length} notifications
+                  }}>
+                    <div className="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                      <strong>Notifications</strong>
+                      <Button variant="link" size="sm" className="p-0" onClick={() => { setShowNotifications(false); navigate('/student/notifications'); }}>
+                        View all
+                      </Button>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                    {notifications.filter(n => !n.is_read).length === 0 ? (
+                      <div className="px-3 py-3 small" style={{ color: 'var(--bs-secondary-color)' }}>No new notifications</div>
+                    ) : (
+                      notifications.filter(n => !n.is_read).slice(0, 5).map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          style={{
+                            cursor: 'pointer',
+                            padding: '10px 16px',
+                            borderBottom: '1px solid var(--bs-border-color)',
+                            backgroundColor: 'var(--bs-warning-bg-subtle)',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bs-secondary-bg)'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--bs-warning-bg-subtle)'}
+                        >
+                          <p className="mb-1 small">{n.message}</p>
+                          <div className="d-flex justify-content-between align-items-center">
+                            <span style={{ fontSize: '11px', color: 'var(--bs-secondary-color)' }}>
+                              {new Date(n.created_at).toLocaleDateString('en-GB')}
+                            </span>
+                            <Badge bg="warning" text="dark" style={{ fontSize: '10px' }}>New</Badge>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
 
-          {user && (
-            <>
-              {user.role !== 'student' && (
-                <Badge bg={roleBadgeColor[user.role]} className="d-none d-lg-inline">{user.role}</Badge>
-              )}
-              <Button
-                variant="outline-light"
-                size="sm"
-                onClick={() => setDarkMode(!darkMode)}
-                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              >
-                {darkMode ? <SunFill size={16} /> : <MoonFill size={16} />}
-              </Button>
-              <Button variant="outline-light" size="sm" onClick={handleLogout}>Logout</Button>
+              
             </>
           )}
+
+          <Button
+            variant="outline-light"
+            size="sm"
+            onClick={() => setDarkMode(!darkMode)}
+            title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {darkMode ? <SunFill size={16} /> : <MoonFill size={16} />}
+          </Button>
+
+          <Button
+            variant="outline-light"
+            size="sm"
+            onClick={handleLogout}
+            title="Logout"
+          >
+            <BoxArrowRight size={16} />
+          </Button>
+        </div>
+      </nav>
+
+      {/* Sidebar Overlay */}
+      {showSidebar && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 2000
+          }}
+          onClick={() => setShowSidebar(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: showSidebar ? 0 : '-280px',
+          width: '280px',
+          height: '100vh',
+          background: darkMode ? '#1a1a1a' : '#212529',
+          zIndex: 2001,
+          transition: 'left 0.3s ease',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        {/* Sidebar Header */}
+        <div className="d-flex align-items-center justify-content-between p-3 border-bottom border-secondary">
+          <div className="d-flex align-items-center gap-2">
+            <img src="/logo.png" alt="FIU Logo" height="32" style={{ objectFit: 'contain' }} />
+            <span className="text-white fw-semibold small">Smart Attendance</span>
+          </div>
+          <Button variant="link" className="p-0 text-white" onClick={() => setShowSidebar(false)}>
+            <X size={22} />
+          </Button>
         </div>
 
+        {/* User Info */}
         {user && (
-          <>
-            <Navbar.Toggle />
-            <Navbar.Collapse>
-              <Nav className="me-auto">
-                {user.role === 'student' && (
-                  <>
-                    <Nav.Link as={Link} to="/student">Dashboard</Nav.Link>
-                    <Nav.Link as={Link} to="/student/attendance">My Attendance</Nav.Link>
-                    <Nav.Link as={Link} to="/student/face-attendance">Take Attendance</Nav.Link>
-                  </>
-                )}
-                {user.role === 'instructor' && (
-                  <Nav.Link as={Link} to="/instructor">Dashboard</Nav.Link>
-                )}
-                {user.role === 'admin' && (
-                  <Nav.Link as={Link} to="/admin">Dashboard</Nav.Link>
-                )}
-              </Nav>
-              <Nav className="d-lg-none">
-                <span className="text-light px-3 py-2">{user?.full_name}</span>
-              </Nav>
-            </Navbar.Collapse>
-          </>
+          <div className="px-3 py-3 border-bottom border-secondary">
+            <div className="d-flex align-items-center gap-2">
+              <div style={{
+                width: '40px', height: '40px', borderRadius: '50%',
+                background: '#c0392b', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '16px'
+              }}>
+                {user.full_name?.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div className="text-white fw-semibold small">{user.full_name}</div>
+                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px' }}>{user.email}</div>
+              </div>
+            </div>
+          </div>
         )}
-      </Container>
-    </Navbar>
+
+        {/* Links */}
+        <div className="flex-grow-1 py-2">
+          {links.map((link, i) => (
+            <Link
+              key={i}
+              to={link.to}
+              onClick={() => setShowSidebar(false)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 20px',
+                color: 'rgba(255,255,255,0.8)',
+                textDecoration: 'none',
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              {link.icon}
+              <span>{link.label}</span>
+            </Link>
+          ))}
+        </div>
+
+        {/* Sidebar Footer - Logout */}
+        <div className="p-3 border-top border-secondary">
+          <button
+            onClick={() => { setShowSidebar(false); handleLogout(); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '10px 20px',
+              color: '#e74c3c',
+              background: 'none',
+              border: 'none',
+              width: '100%',
+              cursor: 'pointer',
+              borderRadius: '8px'
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(231,76,60,0.1)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <BoxArrowRight size={18} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+    </>
   );
 };
 

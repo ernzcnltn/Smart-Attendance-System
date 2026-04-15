@@ -5,7 +5,8 @@ const {
   sendLowAttendanceNotifications,
   getMyNotifications,
   markNotificationRead,
-  deleteNotification
+  deleteNotification,
+  getMyAttendanceStats
 } = require('../controllers/attendanceController');
 const { authenticate, authorize } = require('../middleware/auth');
 
@@ -16,5 +17,6 @@ router.post('/courses/:course_uuid/notify', authorize('instructor', 'admin'), se
 router.get('/notifications', getMyNotifications);
 router.patch('/notifications/:id/read', markNotificationRead);
 router.delete('/notifications/:id', deleteNotification);
+router.get('/my-stats', getMyAttendanceStats);
 
 module.exports = router;

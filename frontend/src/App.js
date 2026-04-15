@@ -20,17 +20,25 @@ import TimetableUpload from './pages/admin/TimetableUpload';
 import Notifications from './pages/student/Notifications';
 import FaceRegister from './pages/student/FaceRegister';
 import FaceAttendance from './pages/student/FaceAttendance';
+import CompleteRegistration from './pages/auth/CompleteRegistration';
+import GoogleSuccess from './pages/auth/GoogleSuccess';
+import Profile from './pages/student/Profile';
+import MyCourses from './pages/student/MyCourses';
+
 
 function AppContent() {
   const location = useLocation();
-  const hideNavbar = location.pathname === '/login';
-
+const hideNavbar = ['/login', '/auth/complete-registration', '/auth/google/success'].includes(location.pathname);
   return (
     <>
       {!hideNavbar && <AppNavbar />}
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
+
+        <Route path="/auth/complete-registration" element={<CompleteRegistration />} />
+        <Route path="/auth/google/success" element={<GoogleSuccess />} />
+
 
         <Route path="/student" element={
           <PrivateRoute roles={['student']}><StudentDashboard /></PrivateRoute>
@@ -50,6 +58,10 @@ function AppContent() {
         <Route path="/student/face-attendance" element={
           <PrivateRoute roles={['student']}><FaceAttendance /></PrivateRoute>
         } />
+
+        <Route path="/student/profile" element={<PrivateRoute roles={['student']}><Profile /></PrivateRoute>} />
+
+        <Route path="/student/courses" element={<PrivateRoute roles={['student']}><MyCourses /></PrivateRoute>} />
 
         <Route path="/instructor" element={
           <PrivateRoute roles={['instructor']}><InstructorDashboard /></PrivateRoute>

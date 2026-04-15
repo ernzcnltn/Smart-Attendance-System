@@ -24,3 +24,8 @@ export const deleteNotification = async (id) => {
   const response = await api.delete(`/attendance/notifications/${id}`);
   return response.data;
 };
+
+export const getMyAttendanceStats = async () => {
+  const response = await api.get('/attendance/my-stats');
+  return response.data.data;
+};

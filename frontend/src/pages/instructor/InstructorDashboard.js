@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, Button, Spinner, Alert, Badge, Image, Modal } from 'react-bootstrap';
+import React, { useEffect, useRef, useState } from 'react';
+import { Container, Row, Col, Card, Button, Spinner, Alert, Badge, Image, Modal, Form } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getMyCourses } from '../../services/courseService';
-import { getActiveSession,deleteSession } from '../../services/sessionService';
-import { PeopleFill, UpcScan, GridFill, PlayCircleFill, StopCircleFill } from 'react-bootstrap-icons';
+import { getActiveSession, deleteSession } from '../../services/sessionService';
+import { PeopleFill, GridFill, PlayCircleFill, StopCircleFill, UpcScan, CloudUploadFill, Download } from 'react-bootstrap-icons';
+import api from '../../services/api';
+import * as XLSX from 'xlsx';
 
 const InstructorDashboard = () => {
   const { user } = useAuth();
@@ -13,7 +15,11 @@ const InstructorDashboard = () => {
   const [activeSessions, setActiveSessions] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [qrModal, setQrModal] = useState({ show: false, course: null, data: null, timeLeft: null });
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const scheduleFileRef = useRef(null);
   const timerRef = React.useRef(null);
 
   useEffect(() => {
@@ -28,9 +34,7 @@ const InstructorDashboard = () => {
       await Promise.all(c.map(async (course) => {
         try {
           const active = await getActiveSession(course.uuid);
-          if (active?.has_active) {
-            sessionMap[course.uuid] = active;
-          }
+          if (active?.has_active) sessionMap[course.uuid] = active;
         } catch (e) {}
       }));
       setActiveSessions(sessionMap);
@@ -41,25 +45,19 @@ const InstructorDashboard = () => {
     }
   };
 
-const handleGenerateQR = async (course) => {
-  try {
-    const active = await getActiveSession(course.uuid);
+  const handleGenerateQR = async (course) => {
+    const active = activeSessions[course.uuid];
     if (active?.has_active) {
-      setActiveSessions(prev => ({ ...prev, [course.uuid]: active }));
       openQrModal(course, active);
     } else {
       navigate(`/instructor/courses/${course.uuid}/qr`);
     }
-  } catch (e) {
-    navigate(`/instructor/courses/${course.uuid}/qr`);
-  }
-};
+  };
 
   const openQrModal = (course, data) => {
     if (timerRef.current) clearInterval(timerRef.current);
     let seconds = data.remaining_seconds;
     setQrModal({ show: true, course, data, timeLeft: seconds });
-
     timerRef.current = setInterval(() => {
       seconds -= 1;
       if (seconds <= 0) {
@@ -88,6 +86,37 @@ const handleGenerateQR = async (course) => {
     return `${m}:${s}`;
   };
 
+  const handleScheduleUpload = async () => {
+    const file = scheduleFileRef.current?.files[0];
+    if (!file) return setError('Please select a file.');
+    setUploadLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/timetable/schedule', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setSuccess(`Schedule uploaded. ${response.data.data.created} entries created.`);
+      setShowScheduleModal(false);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to upload schedule.');
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+const downloadScheduleTemplate = () => {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['course_code', 'day', 'start_time', 'end_time'],
+    ['CS101', 'Monday', '09:00', '10:30'],
+    ['CS101', 'Wednesday', '09:00', '10:30'],
+    ['SOFT404', 'Tuesday', '13:00', '14:30'],
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
+  XLSX.writeFile(wb, 'schedule_template.xlsx');
+};
+
   const totalStudents = courses.reduce((acc, c) => acc + (c.student_count || 0), 0);
   const activeLiveCount = Object.keys(activeSessions).length;
 
@@ -95,7 +124,8 @@ const handleGenerateQR = async (course) => {
 
   return (
     <Container>
-      {error && <Alert variant="danger">{error}</Alert>}
+      {error && <Alert variant="danger" dismissible onClose={() => setError('')}>{error}</Alert>}
+      {success && <Alert variant="success" dismissible onClose={() => setSuccess('')}>{success}</Alert>}
 
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
@@ -105,9 +135,14 @@ const handleGenerateQR = async (course) => {
             {new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
-        <Button variant="danger" onClick={() => navigate('/instructor/courses/new')}>
-          + New Course
-        </Button>
+        <div className="d-flex gap-2">
+          <Button variant="outline-warning" onClick={() => setShowScheduleModal(true)} className="d-flex align-items-center gap-1">
+  <CloudUploadFill size={14} /> Upload Schedule
+</Button>
+          <Button variant="danger" onClick={() => navigate('/instructor/courses/new')}>
+            + New Course
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -155,64 +190,55 @@ const handleGenerateQR = async (course) => {
 
       {/* Courses */}
       <Card className="shadow-sm border-0">
-<Card.Header className="border-bottom py-3">
+        <Card.Header className="border-bottom py-3">
           <strong>My Courses</strong>
         </Card.Header>
         <Card.Body className="p-0">
           {courses.length === 0 ? (
             <p className="text-muted p-3">No courses yet. Create your first course!</p>
           ) : (
-           courses.map((c, i) => {
-  const isLive = !!activeSessions[c.uuid];
-  return (
-    <div
-      key={c.uuid}
-      className="px-3 py-3"
-      style={{ borderBottom: i < courses.length - 1 ? '1px solid var(--bs-border-color)' : 'none' }}
-    >
-      <div className="d-flex justify-content-between align-items-start mb-2">
-        <div style={{ flex: 1, marginRight: '8px' }}>
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            <strong>{c.course_code}</strong>
-            <span className="text-muted">—</span>
-            <span>{c.course_name}</span>
-            {isLive && (
-              <Badge bg="danger" className="d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'white', display: 'inline-block' }}></span>
-                LIVE
-              </Badge>
-            )}
-          </div>
-          <div className="text-muted small mt-1">
-            {c.semester} · Threshold: {c.attendance_threshold}% · {c.student_count || 0} students
-          </div>
-        </div>
-      </div>
-      <div className="d-flex gap-2">
-        <Button
-          size="sm"
-          variant="outline-secondary"
-          className="flex-fill"
-          onClick={() => navigate(`/instructor/courses/${c.uuid}`)}
-        >
-          Manage
-        </Button>
-        <Button
-          size="sm"
-          variant={isLive ? 'danger' : 'primary'}
-          className="flex-fill d-flex align-items-center justify-content-center gap-1"
-          onClick={() => handleGenerateQR(c)}
-        >
-          {isLive ? (
-            <><PlayCircleFill size={14} /> View QR</>
-          ) : (
-            <><UpcScan size={14} /> Generate QR</>
-          )}
-        </Button>
-      </div>
-    </div>
-  );
-})
+            courses.map((c, i) => {
+              const isLive = !!activeSessions[c.uuid];
+              return (
+                <div
+                  key={c.uuid}
+                  className="px-3 py-3"
+                  style={{ borderBottom: i < courses.length - 1 ? '1px solid var(--bs-border-color)' : 'none' }}
+                >
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <div style={{ flex: 1, marginRight: '8px' }}>
+                      <div className="d-flex align-items-center gap-2 flex-wrap">
+                        <strong>{c.course_code}</strong>
+                        <span className="text-muted">—</span>
+                        <span>{c.course_name}</span>
+                        {isLive && (
+                          <Badge bg="danger" className="d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'white', display: 'inline-block' }}></span>
+                            LIVE
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-muted small mt-1">
+                        {c.semester} · Threshold: {c.attendance_threshold}% · {c.student_count || 0} students
+                      </div>
+                    </div>
+                  </div>
+                  <div className="d-flex gap-2">
+                    <Button size="sm" variant="outline-secondary" className="flex-fill" onClick={() => navigate(`/instructor/courses/${c.uuid}`)}>
+                      Manage
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={isLive ? 'danger' : 'primary'}
+                      className="flex-fill d-flex align-items-center justify-content-center gap-1"
+                      onClick={() => handleGenerateQR(c)}
+                    >
+                      {isLive ? <><PlayCircleFill size={14} /> View QR</> : <><UpcScan size={14} /> Generate QR</>}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
           )}
         </Card.Body>
       </Card>
@@ -225,10 +251,7 @@ const handleGenerateQR = async (course) => {
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="text-center">
-          <Badge
-            bg={qrModal.timeLeft > 60 ? 'success' : 'danger'}
-            className="fs-5 px-3 py-2 mb-3"
-          >
+          <Badge bg={qrModal.timeLeft > 60 ? 'success' : 'danger'} className="fs-5 px-3 py-2 mb-3">
             {formatTime(qrModal.timeLeft)}
           </Badge>
           <p className="text-muted small mb-3">Time remaining</p>
@@ -237,29 +260,54 @@ const handleGenerateQR = async (course) => {
           )}
           <p className="text-muted small mt-3">Show this QR code to students.</p>
         </Modal.Body>
-     <Modal.Footer className="justify-content-between">
-  <Button
-    variant="outline-danger"
-    size="sm"
-    onClick={async () => {
-      try {
-        await deleteSession(qrModal.data.session_uuid);
-        closeQrModal();
-        setActiveSessions(prev => {
-          const updated = { ...prev };
-          delete updated[qrModal.course.uuid];
-          return updated;
-        });
-      } catch (e) {}
-    }}
-  >
-    <StopCircleFill size={14} className="me-1" />
-    Cancel Session
-  </Button>
-  <Button variant="secondary" size="sm" onClick={closeQrModal}>
-    Close
-  </Button>
-</Modal.Footer>
+        <Modal.Footer className="justify-content-between">
+          <Button
+            variant="outline-danger"
+            size="sm"
+            onClick={async () => {
+              try {
+                await deleteSession(qrModal.data.session_uuid);
+                closeQrModal();
+                setActiveSessions(prev => {
+                  const updated = { ...prev };
+                  delete updated[qrModal.course.uuid];
+                  return updated;
+                });
+              } catch (e) {}
+            }}
+          >
+            <StopCircleFill size={14} className="me-1" />
+            Cancel Session
+          </Button>
+          <Button variant="secondary" size="sm" onClick={closeQrModal}>Close</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Schedule Upload Modal */}
+      <Modal show={showScheduleModal} onHide={() => setShowScheduleModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Upload Course Schedule</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Alert variant="info" className="small">
+            Excel file must contain: <strong>course_code</strong>, <strong>day</strong>, <strong>start_time</strong>, <strong>end_time</strong> columns.
+            <br />Day values: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+            <br />Time format: HH:MM (e.g. 09:00)
+          </Alert>
+          <Button variant="outline-secondary" size="sm" className="mb-3 d-flex align-items-center gap-1" onClick={downloadScheduleTemplate}>
+            <Download size={14} /> Download Template
+          </Button>
+          <Form.Group>
+            <Form.Label>Select Excel File (.xlsx)</Form.Label>
+            <Form.Control type="file" accept=".xlsx,.xls" ref={scheduleFileRef} />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowScheduleModal(false)}>Cancel</Button>
+          <Button variant="primary" onClick={handleScheduleUpload} disabled={uploadLoading}>
+            {uploadLoading ? <Spinner size="sm" /> : 'Upload'}
+          </Button>
+        </Modal.Footer>
       </Modal>
     </Container>
   );

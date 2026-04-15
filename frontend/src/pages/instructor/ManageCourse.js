@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Container, Row, Col, Card, Table, Button, Form, Modal, Alert, Spinner, Badge } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCourseByUUID, getCourseStudents, enrollStudent } from '../../services/courseService';
 import { getAttendanceStats, sendLowAttendanceNotifications } from '../../services/attendanceService';
 import { exportExcel, exportPDF, exportSessionExcel, exportSessionPDF } from '../../services/exportService';
 import { getSessionsByCourse } from '../../services/sessionService';
+import api from '../../services/api';
+import * as XLSX from 'xlsx';
+import { Download } from 'react-bootstrap-icons';
 
 const ManageCourse = () => {
   const { uuid } = useParams();
@@ -20,6 +23,10 @@ const ManageCourse = () => {
   const [studentUUID, setStudentUUID] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [confirmModal, setConfirmModal] = useState({ show: false, title: '', message: '', onConfirm: null });
+  const [showStudentUploadModal, setShowStudentUploadModal] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const studentFileRef = useRef(null);
+  
 
   useEffect(() => {
     const fetchData = async () => {
@@ -52,6 +59,17 @@ const ManageCourse = () => {
     if (confirmModal.onConfirm) await confirmModal.onConfirm();
   };
 
+const downloadStudentTemplate = () => {
+  const data = [
+    { student_number: '2003060007' },
+    { student_number: '2003060008' },
+  ];
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Students');
+  XLSX.writeFile(wb, 'student_list_template.xlsx');
+};
+
   const handleEnroll = async (e) => {
     e.preventDefault();
     try {
@@ -81,6 +99,30 @@ const ManageCourse = () => {
       }
     );
   };
+
+  const handleStudentUpload = async () => {
+    const file = studentFileRef.current?.files[0];
+    if (!file) return setError('Please select a file.');
+    setUploadLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('course_uuid', uuid);
+      const response = await api.post('/timetable/students', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setSuccess(`${response.data.data.enrolled} students enrolled. ${response.data.data.notFound} not found in system.`);
+      setShowStudentUploadModal(false);
+      const s = await getCourseStudents(uuid);
+      setStudents(s);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to upload student list.');
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+ 
 
   if (loading) return <Container className="text-center mt-5"><Spinner animation="border" /></Container>;
 
@@ -129,6 +171,7 @@ const ManageCourse = () => {
 
       <div className="d-flex flex-wrap gap-2 mb-4">
         <Button variant="outline-primary" onClick={() => setShowEnrollModal(true)}>+ Enroll Student</Button>
+        <Button variant="outline-info" onClick={() => setShowStudentUploadModal(true)}>Upload Student List</Button>
         <Button variant="outline-danger" onClick={handleNotify}>Send Low Attendance Alerts</Button>
         <Button variant="outline-success" onClick={() => navigate(`/instructor/courses/${uuid}/qr`)}>Generate QR</Button>
         <Button variant="outline-secondary" onClick={() => exportExcel(uuid)}>Export Excel</Button>
@@ -194,12 +237,8 @@ const ManageCourse = () => {
                     <td>{s.attendance_count} students</td>
                     <td>
                       <div className="d-flex gap-1">
-                        <Button size="sm" variant="outline-secondary" onClick={() => exportSessionExcel(s.uuid)}>
-                          Excel
-                        </Button>
-                        <Button size="sm" variant="outline-dark" onClick={() => exportSessionPDF(s.uuid)}>
-                          PDF
-                        </Button>
+                        <Button size="sm" variant="outline-secondary" onClick={() => exportSessionExcel(s.uuid)}>Excel</Button>
+                        <Button size="sm" variant="outline-dark" onClick={() => exportSessionPDF(s.uuid)}>PDF</Button>
                       </div>
                     </td>
                   </tr>
@@ -210,6 +249,7 @@ const ManageCourse = () => {
         </Card.Body>
       </Card>
 
+      {/* Enroll Student Modal */}
       <Modal show={showEnrollModal} onHide={() => { setShowEnrollModal(false); setStudentUUID(''); setSearchResults([]); }}>
         <Modal.Header closeButton>
           <Modal.Title>Enroll Student</Modal.Title>
@@ -248,13 +288,41 @@ const ManageCourse = () => {
               </div>
             )}
             {studentUUID && <p className="text-success small">Student selected.</p>}
-            <Button type="submit" variant="primary" className="w-100" disabled={!studentUUID}>
-              Enroll
-            </Button>
+            <Button type="submit" variant="primary" className="w-100" disabled={!studentUUID}>Enroll</Button>
           </Form>
         </Modal.Body>
       </Modal>
 
+      {/* Upload Student List Modal */}
+      <Modal show={showStudentUploadModal} onHide={() => setShowStudentUploadModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Upload Student List</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Alert variant="info" className="small">
+            Excel file must contain a <strong>student_number</strong> column.
+            Students already in the system will be enrolled automatically.
+          </Alert>
+          <Button variant="outline-secondary" size="sm" className="mb-3 d-flex align-items-center gap-1" onClick={downloadStudentTemplate}>
+  <Download size={14} /> Download Template
+</Button>
+          <Form.Group>
+            <Form.Label>Select Excel File (.xlsx)</Form.Label>
+            <Form.Control type="file" accept=".xlsx,.xls" ref={studentFileRef} />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowStudentUploadModal(false)}>Cancel</Button>
+          <Button variant="primary" onClick={handleStudentUpload} disabled={uploadLoading}>
+            {uploadLoading ? <Spinner size="sm" /> : 'Upload'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      
+     
+
+      {/* Confirm Modal */}
       <Modal show={confirmModal.show} onHide={() => setConfirmModal({ ...confirmModal, show: false })} centered>
         <Modal.Header closeButton>
           <Modal.Title>{confirmModal.title}</Modal.Title>
@@ -263,12 +331,8 @@ const ManageCourse = () => {
           <p>{confirmModal.message}</p>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setConfirmModal({ ...confirmModal, show: false })}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={handleConfirm}>
-            Confirm
-          </Button>
+          <Button variant="secondary" onClick={() => setConfirmModal({ ...confirmModal, show: false })}>Cancel</Button>
+          <Button variant="danger" onClick={handleConfirm}>Confirm</Button>
         </Modal.Footer>
       </Modal>
     </Container>

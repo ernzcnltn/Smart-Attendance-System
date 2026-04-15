@@ -55,6 +55,36 @@ const getAttendanceStats = async (req, res) => {
   }
 };
 
+const getMyAttendanceStats = async (req, res) => {
+  try {
+    const [courses] = await pool.query(`
+      SELECT c.uuid, c.course_code, c.course_name, c.attendance_threshold,
+        COUNT(DISTINCT cs.id) as total_sessions,
+        COUNT(DISTINCT ar.id) as attended_sessions
+      FROM course_enrollments ce
+      JOIN courses c ON ce.course_id = c.id
+      LEFT JOIN class_sessions cs ON cs.course_id = c.id
+      LEFT JOIN attendance_records ar ON ar.session_id = cs.id AND ar.student_id = ?
+      WHERE ce.student_id = ?
+      GROUP BY c.id
+    `, [req.user.id, req.user.id]);
+
+    const stats = courses.map(c => ({
+      course_code: c.course_code,
+      course_name: c.course_name,
+      total_sessions: c.total_sessions,
+      attended_sessions: c.attended_sessions,
+      percentage: c.total_sessions > 0 ? Math.round((c.attended_sessions / c.total_sessions) * 100) : 0,
+      threshold: c.attendance_threshold
+    }));
+
+    return successResponse(res, stats);
+  } catch (error) {
+    console.error('Get my attendance stats error:', error.message);
+    return errorResponse(res, 'Failed to fetch attendance stats.');
+  }
+};
+
 const sendLowAttendanceNotifications = async (req, res) => {
   const { course_uuid } = req.params;
 
@@ -171,6 +201,7 @@ const deleteNotification = async (req, res) => {
 
 module.exports = {
   getAttendanceStats,
+  getMyAttendanceStats,
   sendLowAttendanceNotifications,
   getMyNotifications,
   markNotificationRead,

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Form, Button, Alert, InputGroup } from 'react-bootstrap';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Form, Button, Alert, InputGroup, Spinner } from 'react-bootstrap';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { EyeFill, EyeSlashFill, PersonFill } from 'react-bootstrap-icons';
+import { GoogleLogin } from '@react-oauth/google';
 import { login } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
 
@@ -13,6 +14,13 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const { updateUser } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const err = searchParams.get('error');
+    if (err === 'google_failed') setError('Google sign in failed. Please try again.');
+    if (err) setError(decodeURIComponent(err));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,11 +39,19 @@ const Login = () => {
     }
   };
 
+  const handleGoogleSuccess = (credentialResponse) => {
+    window.location.href = `${process.env.REACT_APP_API_URL}/auth/google`;
+  };
+
+  const handleGoogleError = () => {
+    setError('Google sign in failed. Please try again.');
+  };
+
   return (
     <div
       style={{
         minHeight: '100vh',
-        backgroundImage: 'url(/background1.jpg)',
+        backgroundImage: 'url(/background.jpg)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -64,6 +80,25 @@ const Login = () => {
         </div>
 
         {error && <Alert variant="danger" className="py-2 small">{error}</Alert>}
+
+        {/* Google Sign In */}
+        <div className="d-flex justify-content-center mb-3">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+            text="signin_with"
+            shape="rectangular"
+            theme="outline"
+            size="large"
+            width="340"
+          />
+        </div>
+
+        <div className="d-flex align-items-center mb-3">
+          <hr style={{ flex: 1, borderColor: 'rgba(255,255,255,0.3)' }} />
+          <span style={{ color: 'rgba(255,255,255,0.5)', padding: '0 10px', fontSize: '12px' }}>or sign in with email</span>
+          <hr style={{ flex: 1, borderColor: 'rgba(255,255,255,0.3)' }} />
+        </div>
 
         <Form onSubmit={handleSubmit}>
           <Form.Group className="mb-3">
