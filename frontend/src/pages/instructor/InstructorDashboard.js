@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Container, Row, Col, Card, Button, Spinner, Alert, Badge, Image, Modal, Form } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getMyCourses } from '../../services/courseService';
+import { getMyCourses, deleteCourse } from '../../services/courseService';
 import { getActiveSession, deleteSession } from '../../services/sessionService';
-import { PeopleFill, GridFill, PlayCircleFill, StopCircleFill, UpcScan, CloudUploadFill, Download } from 'react-bootstrap-icons';
+import { PeopleFill, GridFill, PlayCircleFill, StopCircleFill, UpcScan, CloudUploadFill, Download, TrashFill } from 'react-bootstrap-icons';
 import api from '../../services/api';
 import * as XLSX from 'xlsx';
+
+const ITEMS_PER_PAGE = 5;
 
 const InstructorDashboard = () => {
   const { user } = useAuth();
@@ -19,8 +21,11 @@ const InstructorDashboard = () => {
   const [qrModal, setQrModal] = useState({ show: false, course: null, data: null, timeLeft: null });
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ show: false, title: '', message: '', onConfirm: null });
+  const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const scheduleFileRef = useRef(null);
-  const timerRef = React.useRef(null);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     fetchData();
@@ -43,6 +48,31 @@ const InstructorDashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const showConfirm = (title, message, onConfirm) => {
+    setConfirmModal({ show: true, title, message, onConfirm });
+  };
+
+  const handleConfirm = async () => {
+    setConfirmModal({ ...confirmModal, show: false });
+    if (confirmModal.onConfirm) await confirmModal.onConfirm();
+  };
+
+  const handleDeleteCourse = (course) => {
+    showConfirm(
+      'Delete Course',
+      `Are you sure you want to delete "${course.course_code} — ${course.course_name}"? All student enrollments and attendance records will be permanently deleted.`,
+      async () => {
+        try {
+          await deleteCourse(course.uuid);
+          setSuccess('Course deleted successfully.');
+          await fetchData();
+        } catch (err) {
+          setError('Failed to delete course.');
+        }
+      }
+    );
   };
 
   const handleGenerateQR = async (course) => {
@@ -96,8 +126,9 @@ const InstructorDashboard = () => {
       const response = await api.post('/timetable/schedule', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setSuccess(`Schedule uploaded. ${response.data.data.created} entries created.`);
+      setSuccess(`Schedule uploaded. ${response.data.data.created} entries created, ${response.data.data.coursesCreated} new courses created.`);
       setShowScheduleModal(false);
+      await fetchData();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to upload schedule.');
     } finally {
@@ -105,17 +136,30 @@ const InstructorDashboard = () => {
     }
   };
 
-const downloadScheduleTemplate = () => {
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([
-    ['course_code', 'day', 'start_time', 'end_time'],
-    ['CS101', 'Monday', '09:00', '10:30'],
-    ['CS101', 'Wednesday', '09:00', '10:30'],
-    ['SOFT404', 'Tuesday', '13:00', '14:30'],
-  ]);
-  XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
-  XLSX.writeFile(wb, 'schedule_template.xlsx');
-};
+  const downloadScheduleTemplate = () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['course_code', 'course_name', 'semester', 'group_name', 'day', 'start_time', 'end_time'],
+      ['CS101', 'Introduction to Computer Science', '2025-2026 Spring', '1', 'Monday', '09:00', '10:30'],
+      ['CS101', 'Introduction to Computer Science', '2025-2026 Spring', '1', 'Wednesday', '09:00', '10:30'],
+      ['CS101', 'Introduction to Computer Science', '2025-2026 Spring', '2', 'Monday', '12:30', '14:30'],
+      ['SOFT404', 'Capstone Project', '2025-2026 Spring', '', 'Tuesday', '13:00', '14:30'],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
+    XLSX.writeFile(wb, 'schedule_template.xlsx');
+  };
+
+  const filteredCourses = courses.filter(c =>
+    c.course_code.toLowerCase().includes(search.toLowerCase()) ||
+    c.course_name.toLowerCase().includes(search.toLowerCase()) ||
+    (c.group_name && String(c.group_name).toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const totalPages = Math.ceil(filteredCourses.length / ITEMS_PER_PAGE);
+  const paginatedCourses = filteredCourses.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const totalStudents = courses.reduce((acc, c) => acc + (c.student_count || 0), 0);
   const activeLiveCount = Object.keys(activeSessions).length;
@@ -137,8 +181,8 @@ const downloadScheduleTemplate = () => {
         </div>
         <div className="d-flex gap-2">
           <Button variant="outline-warning" onClick={() => setShowScheduleModal(true)} className="d-flex align-items-center gap-1">
-  <CloudUploadFill size={14} /> Upload Schedule
-</Button>
+            <CloudUploadFill size={14} /> Upload Schedule
+          </Button>
           <Button variant="danger" onClick={() => navigate('/instructor/courses/new')}>
             + New Course
           </Button>
@@ -191,24 +235,36 @@ const downloadScheduleTemplate = () => {
       {/* Courses */}
       <Card className="shadow-sm border-0">
         <Card.Header className="border-bottom py-3">
-          <strong>My Courses</strong>
+          <div className="d-flex justify-content-between align-items-center">
+            <strong>My Courses</strong>
+            <Form.Control
+              size="sm"
+              placeholder="Search courses..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+              style={{ maxWidth: '200px' }}
+            />
+          </div>
         </Card.Header>
         <Card.Body className="p-0">
-          {courses.length === 0 ? (
-            <p className="text-muted p-3">No courses yet. Create your first course!</p>
+          {paginatedCourses.length === 0 ? (
+            <p className="text-muted p-3">
+              {search ? 'No courses found.' : 'No courses yet. Create your first course!'}
+            </p>
           ) : (
-            courses.map((c, i) => {
+            paginatedCourses.map((c, i) => {
               const isLive = !!activeSessions[c.uuid];
               return (
                 <div
                   key={c.uuid}
                   className="px-3 py-3"
-                  style={{ borderBottom: i < courses.length - 1 ? '1px solid var(--bs-border-color)' : 'none' }}
+                  style={{ borderBottom: i < paginatedCourses.length - 1 ? '1px solid var(--bs-border-color)' : 'none' }}
                 >
                   <div className="d-flex justify-content-between align-items-start mb-2">
                     <div style={{ flex: 1, marginRight: '8px' }}>
                       <div className="d-flex align-items-center gap-2 flex-wrap">
                         <strong>{c.course_code}</strong>
+                        {c.group_name && <Badge bg="secondary" style={{ fontSize: '11px' }}>Group {c.group_name}</Badge>}
                         <span className="text-muted">—</span>
                         <span>{c.course_name}</span>
                         {isLive && (
@@ -235,12 +291,40 @@ const downloadScheduleTemplate = () => {
                     >
                       {isLive ? <><PlayCircleFill size={14} /> View QR</> : <><UpcScan size={14} /> Generate QR</>}
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline-danger"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteCourse(c); }}
+                    >
+                      <TrashFill size={14} />
+                    </Button>
                   </div>
                 </div>
               );
             })
           )}
         </Card.Body>
+        {totalPages > 1 && (
+          <Card.Footer className="d-flex justify-content-between align-items-center py-2">
+            <small className="text-muted">
+              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredCourses.length)} of {filteredCourses.length}
+            </small>
+            <div className="d-flex gap-1">
+              <Button size="sm" variant="outline-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)}>←</Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <Button
+                  key={page}
+                  size="sm"
+                  variant={currentPage === page ? 'primary' : 'outline-secondary'}
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button size="sm" variant="outline-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(currentPage + 1)}>→</Button>
+            </div>
+          </Card.Footer>
+        )}
       </Card>
 
       {/* QR Modal */}
@@ -290,9 +374,10 @@ const downloadScheduleTemplate = () => {
         </Modal.Header>
         <Modal.Body>
           <Alert variant="info" className="small">
-            Excel file must contain: <strong>course_code</strong>, <strong>day</strong>, <strong>start_time</strong>, <strong>end_time</strong> columns.
+            Excel file must contain: <strong>course_code</strong>, <strong>course_name</strong>, <strong>semester</strong>, <strong>group_name</strong> (optional), <strong>day</strong>, <strong>start_time</strong>, <strong>end_time</strong> columns.
             <br />Day values: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
             <br />Time format: HH:MM (e.g. 09:00)
+            <br />For multiple days or groups, add a new row.
           </Alert>
           <Button variant="outline-secondary" size="sm" className="mb-3 d-flex align-items-center gap-1" onClick={downloadScheduleTemplate}>
             <Download size={14} /> Download Template
@@ -307,6 +392,20 @@ const downloadScheduleTemplate = () => {
           <Button variant="primary" onClick={handleScheduleUpload} disabled={uploadLoading}>
             {uploadLoading ? <Spinner size="sm" /> : 'Upload'}
           </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Confirm Modal */}
+      <Modal show={confirmModal.show} onHide={() => setConfirmModal({ ...confirmModal, show: false })} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{confirmModal.title}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>{confirmModal.message}</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setConfirmModal({ ...confirmModal, show: false })}>Cancel</Button>
+          <Button variant="danger" onClick={handleConfirm}>Delete</Button>
         </Modal.Footer>
       </Modal>
     </Container>

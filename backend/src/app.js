@@ -31,6 +31,9 @@ const faceLimiter = rateLimit({
   message: { success: false, message: 'Too many face requests. Please try again later.' }
 });
 
+const { startSessionExpiryJob } = require('./jobs/sessionExpiry');
+startSessionExpiryJob();
+
 app.use('/api/auth', authLimiter);
 app.use('/api/face/register', faceLimiter);
 app.use('/api/face/verify', faceLimiter);

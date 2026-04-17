@@ -74,9 +74,8 @@ const StudentDashboard = () => {
         <Button
           variant="danger"
           className="d-flex align-items-center gap-2"
-          onClick={() => navigate('/student/face-attendance')}
-        >
-          <CameraFill size={16} />
+onClick={() => navigate('/student/courses')}        >
+          
           <span className="d-none d-sm-inline">Take Attendance</span>
         </Button>
       </div>

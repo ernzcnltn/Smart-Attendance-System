@@ -31,13 +31,31 @@ const createSession = async (req, res) => {
   }
 };
 
+const notifyStudents = async (courseId, message) => {
+  try {
+    const [students] = await pool.query(`
+      SELECT student_id FROM course_enrollments WHERE course_id = ?
+    `, [courseId]);
+
+    if (students.length === 0) return;
+
+    const notifications = students.map(s => [s.student_id, message]);
+    await pool.query(
+      'INSERT INTO notifications (user_id, message) VALUES ?',
+      [notifications]
+    );
+  } catch (err) {
+    console.error('Notify students error:', err.message);
+  }
+};
+
 const generateQR = async (req, res) => {
   const { course_uuid } = req.params;
   const { duration_minutes = 15, use_existing = false, force_new = false } = req.body;
 
   try {
     const [course] = await pool.query(
-      'SELECT id FROM courses WHERE uuid = ? AND instructor_id = ?',
+      'SELECT id, course_code, course_name FROM courses WHERE uuid = ? AND instructor_id = ?',
       [course_uuid, req.user.id]
     );
     if (course.length === 0) {
@@ -77,6 +95,7 @@ const generateQR = async (req, res) => {
 
     let sessionUUID;
     let sessionId;
+    let isNewSession = false;
 
     if (existingSessions.length > 0 && use_existing) {
       sessionUUID = existingSessions[0].uuid;
@@ -88,6 +107,7 @@ const generateQR = async (req, res) => {
         [sessionUUID, course[0].id, today, startTime, endTime]
       );
       sessionId = result.insertId;
+      isNewSession = true;
     }
 
     const qr_token = generateUUID();
@@ -97,6 +117,14 @@ const generateQR = async (req, res) => {
       'UPDATE class_sessions SET qr_token = ?, qr_expires_at = ?, is_active = true WHERE id = ?',
       [qr_token, qr_expires_at, sessionId]
     );
+
+    // Yeni session açılınca bildirim gönder
+    if (isNewSession) {
+      await notifyStudents(
+        course[0].id,
+        ` ${course[0].course_code} - ${course[0].course_name} attendance is now open. Please scan the QR code to mark your attendance.`
+      );
+    }
 
     const qrData = JSON.stringify({
       session_uuid: sessionUUID,
@@ -258,7 +286,7 @@ const deleteSession = async (req, res) => {
   const { uuid } = req.params;
   try {
     const [session] = await pool.query(`
-      SELECT cs.id, c.instructor_id 
+      SELECT cs.id, cs.course_id, c.instructor_id, c.course_code, c.course_name
       FROM class_sessions cs
       JOIN courses c ON cs.course_id = c.id
       WHERE cs.uuid = ?
@@ -269,6 +297,12 @@ const deleteSession = async (req, res) => {
       return errorResponse(res, 'Access denied.', 403);
     }
 
+    // Session silinince bildirim gönder
+   await notifyStudents(
+  session[0].course_id,
+  `${session[0].course_code} - ${session[0].course_name} attendance session has been cancelled by the instructor.`
+);
+
     await pool.query('DELETE FROM class_sessions WHERE uuid = ?', [uuid]);
     return successResponse(res, {}, 'Session deleted successfully.');
   } catch (error) {
@@ -276,7 +310,6 @@ const deleteSession = async (req, res) => {
     return errorResponse(res, 'Failed to delete session.');
   }
 };
-
 
 const getSessionsByCourse = async (req, res) => {
   const { course_uuid } = req.params;
@@ -337,7 +370,6 @@ const getActiveSession = async (req, res) => {
       expires_at: session.qr_expires_at
     });
 
-    const QRCode = require('qrcode');
     const qrCodeImage = await QRCode.toDataURL(qrData);
 
     return successResponse(res, {
@@ -364,7 +396,6 @@ module.exports = {
   getSessionAttendance,
   getMyAttendance,
   deleteSession,
-    getSessionsByCourse,
-    getActiveSession
-
+  getSessionsByCourse,
+  getActiveSession
 };

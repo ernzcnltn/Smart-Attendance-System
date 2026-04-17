@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Container, Card, Button, Alert, Spinner, Table, Badge } from 'react-bootstrap';
+import { Container, Card, Button, Alert, Spinner, Table, Badge, Form } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { Download } from 'react-bootstrap-icons';
+import * as XLSX from 'xlsx';
 import api from '../../services/api';
 
 const TimetableUpload = () => {
@@ -12,11 +14,11 @@ const TimetableUpload = () => {
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
-    if (selected && selected.name.endsWith('.csv')) {
+    if (selected && (selected.name.endsWith('.xlsx') || selected.name.endsWith('.xls'))) {
       setFile(selected);
       setError('');
     } else {
-      setError('Please select a valid CSV file.');
+      setError('Please select a valid Excel file (.xlsx).');
       setFile(null);
     }
   };
@@ -43,21 +45,18 @@ const TimetableUpload = () => {
     }
   };
 
-  const downloadTemplate = () => {
-    const csv = [
-      'course_code,course_name,instructor_email,semester,attendance_threshold,session_date,start_time,end_time',
-      'CS101,Introduction to Computer Science,instructor@test.com,2024-2025 Spring,70,2025-03-24,09:00:00,10:30:00',
-      'CS102,Data Structures,instructor@test.com,2024-2025 Spring,70,2025-03-25,11:00:00,12:30:00'
-    ].join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'timetable_template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+const downloadTemplate = () => {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['course_code', 'course_name', 'instructor_email', 'semester', 'attendance_threshold', 'group_name', 'day', 'start_time', 'end_time'],
+    ['CS101', 'Introduction to Computer Science', 'instructor@final.edu.tr', '2025-2026 Spring', '70', '1', 'Monday', '09:00', '10:30'],
+    ['CS101', 'Introduction to Computer Science', 'instructor@final.edu.tr', '2025-2026 Spring', '70', '1', 'Wednesday', '09:00', '10:30'],
+    ['CS101', 'Introduction to Computer Science', 'instructor@final.edu.tr', '2025-2026 Spring', '70', '2', 'Monday', '12:30', '14:30'],
+    ['CS102', 'Data Structures', 'instructor@final.edu.tr', '2025-2026 Spring', '70', '', 'Tuesday', '11:00', '12:30'],
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Timetable');
+  XLSX.writeFile(wb, 'timetable_template.xlsx');
+};
 
   return (
     <Container>
@@ -70,23 +69,31 @@ const TimetableUpload = () => {
         <Card.Body>
           {error && <Alert variant="danger">{error}</Alert>}
 
-          <p className="text-muted small mb-3">
-            Upload a CSV file to create courses and sessions in bulk.
-            Download the template to see the required format.
-          </p>
+          <Alert variant="info" className="small">
+            Upload an Excel file to create courses and schedules for all instructors.
+            <br />Required columns: <strong>course_code</strong>, <strong>course_name</strong>, <strong>instructor_email</strong>, <strong>semester</strong>, <strong>attendance_threshold</strong>, <strong>day</strong>, <strong>start_time</strong>, <strong>end_time</strong>
+            <br />Day values: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+            <br />Time format: HH:MM (e.g. 09:00)
+            <br />For multiple days, add a new row with the same course_code.
+          </Alert>
 
-          <Button variant="outline-secondary" size="sm" className="mb-3" onClick={downloadTemplate}>
-            Download CSV Template
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            className="mb-3 d-flex align-items-center gap-1"
+            onClick={downloadTemplate}
+          >
+            <Download size={14} /> Download Excel Template
           </Button>
 
-          <div className="mb-3">
-            <input
+          <Form.Group className="mb-3">
+            <Form.Label>Select Excel File (.xlsx)</Form.Label>
+            <Form.Control
               type="file"
-              accept=".csv"
-              className="form-control"
+              accept=".xlsx,.xls"
               onChange={handleFileChange}
             />
-          </div>
+          </Form.Group>
 
           <Button
             variant="primary"
@@ -103,9 +110,10 @@ const TimetableUpload = () => {
         <Card className="shadow-sm" style={{ maxWidth: '600px', margin: '0 auto' }}>
           <Card.Header><strong>Upload Result</strong></Card.Header>
           <Card.Body>
-            <div className="d-flex gap-3 mb-3">
+            <div className="d-flex gap-3 mb-3 flex-wrap">
               <Badge bg="secondary" className="fs-6">Processed: {result.processed}</Badge>
-              <Badge bg="success" className="fs-6">Created: {result.created}</Badge>
+              <Badge bg="success" className="fs-6">Schedules: {result.created}</Badge>
+              <Badge bg="primary" className="fs-6">New Courses: {result.coursesCreated}</Badge>
               <Badge bg="danger" className="fs-6">Errors: {result.errors?.length || 0}</Badge>
             </div>
 

@@ -5,35 +5,57 @@ const csv = require('csv-parser');
 const XLSX = require('xlsx');
 
 const uploadTimetable = async (req, res) => {
-  if (!req.file) {
-    return errorResponse(res, 'No file uploaded.', 400);
-  }
+  if (!req.file) return errorResponse(res, 'No file uploaded.', 400);
 
-  const results = [];
   const errors = [];
   let processed = 0;
   let created = 0;
+  let coursesCreated = 0;
+  const deletedCourses = new Set();
+
+  const formatTime = (time) => {
+    if (!isNaN(Number(time)) && String(time).includes('.')) {
+      const num = Number(time);
+      const totalMinutes = Math.round(num * 24 * 60);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+    }
+    const str = String(time).trim();
+    const parts = str.split(':');
+    if (parts.length >= 2) {
+      return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}:00`;
+    }
+    return str;
+  };
 
   try {
-    await new Promise((resolve, reject) => {
-      fs.createReadStream(req.file.path)
-        .pipe(csv())
-        .on('data', (data) => results.push(data))
-        .on('end', resolve)
-        .on('error', reject);
-    });
+    const workbook = XLSX.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const results = XLSX.utils.sheet_to_json(sheet);
+
+    const validDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     for (const row of results) {
       processed++;
       try {
-        const {
-          course_code, course_name, instructor_email,
-          semester, attendance_threshold,
-          session_date, start_time, end_time
-        } = row;
+        const course_code = String(row['course_code'] || '').trim();
+        const course_name = String(row['course_name'] || '').trim();
+        const instructor_email = String(row['instructor_email'] || '').trim();
+        const semester = String(row['semester'] || '').trim();
+        const attendance_threshold = row['attendance_threshold'] || 70;
+        const day = String(row['day'] || '').trim();
+        const start_time = String(row['start_time'] || '').trim();
+        const end_time = String(row['end_time'] || '').trim();
+        const group_name = String(row['group_name'] || row['Group'] || '').trim() || null;
 
-        if (!course_code || !course_name || !instructor_email || !semester || !session_date || !start_time || !end_time) {
+        if (!course_code || !course_name || !instructor_email || !semester || !day || !start_time || !end_time) {
           errors.push(`Row ${processed}: Missing required fields.`);
+          continue;
+        }
+
+        if (!validDays.includes(day)) {
+          errors.push(`Row ${processed}: Invalid day "${day}".`);
           continue;
         }
 
@@ -48,8 +70,8 @@ const uploadTimetable = async (req, res) => {
 
         let courseId;
         const [existingCourse] = await pool.query(
-          'SELECT id FROM courses WHERE course_code = ?',
-          [course_code]
+          'SELECT id FROM courses WHERE course_code = ? AND instructor_id = ? AND (group_name = ? OR (group_name IS NULL AND ? IS NULL))',
+          [course_code, instructor[0].id, group_name, group_name]
         );
 
         if (existingCourse.length > 0) {
@@ -57,25 +79,23 @@ const uploadTimetable = async (req, res) => {
         } else {
           const uuid = generateUUID();
           const [result] = await pool.query(
-            'INSERT INTO courses (uuid, course_code, course_name, instructor_id, semester, attendance_threshold) VALUES (?, ?, ?, ?, ?, ?)',
-            [uuid, course_code, course_name, instructor[0].id, semester, attendance_threshold || 70]
+            'INSERT INTO courses (uuid, course_code, course_name, instructor_id, semester, attendance_threshold, group_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [uuid, course_code, course_name, instructor[0].id, semester, attendance_threshold, group_name]
           );
           courseId = result.insertId;
+          coursesCreated++;
         }
 
-        const [existingSession] = await pool.query(
-          'SELECT id FROM class_sessions WHERE course_id = ? AND session_date = ? AND start_time = ?',
-          [courseId, session_date, start_time]
+        if (!deletedCourses.has(courseId)) {
+          await pool.query('DELETE FROM course_schedules WHERE course_id = ?', [courseId]);
+          deletedCourses.add(courseId);
+        }
+
+        await pool.query(
+          'INSERT INTO course_schedules (course_id, day, start_time, end_time) VALUES (?, ?, ?, ?)',
+          [courseId, day, formatTime(start_time), formatTime(end_time)]
         );
-
-        if (existingSession.length === 0) {
-          const sessionUUID = generateUUID();
-          await pool.query(
-            'INSERT INTO class_sessions (uuid, course_id, session_date, start_time, end_time) VALUES (?, ?, ?, ?, ?)',
-            [sessionUUID, courseId, session_date, start_time, end_time]
-          );
-          created++;
-        }
+        created++;
       } catch (err) {
         errors.push(`Row ${processed}: ${err.message}`);
       }
@@ -83,8 +103,8 @@ const uploadTimetable = async (req, res) => {
 
     fs.unlinkSync(req.file.path);
 
-    return successResponse(res, { processed, created, errors },
-      `Timetable uploaded. ${created} sessions created.`);
+    return successResponse(res, { processed, created, coursesCreated, errors },
+      `Timetable uploaded. ${created} schedule entries created, ${coursesCreated} new courses created.`);
   } catch (error) {
     console.error('Upload timetable error:', error.message);
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -169,31 +189,34 @@ const uploadCourseSchedule = async (req, res) => {
     const validDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     let created = 0;
     let skipped = 0;
+    let coursesCreated = 0;
     const errors = [];
     const deletedCourses = new Set();
 
-  const formatTime = (time) => {
-  if (!isNaN(Number(time)) && String(time).includes('.')) {
-    const num = Number(time);
-    const totalMinutes = Math.round(num * 24 * 60);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
-  }
-  const str = String(time).trim();
-  const parts = str.split(':');
-  if (parts.length >= 2) {
-    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}:00`;
-  }
-  return str;
-};
+    const formatTime = (time) => {
+      if (!isNaN(Number(time)) && String(time).includes('.')) {
+        const num = Number(time);
+        const totalMinutes = Math.round(num * 24 * 60);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+      }
+      const str = String(time).trim();
+      const parts = str.split(':');
+      if (parts.length >= 2) {
+        return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}:00`;
+      }
+      return str;
+    };
 
     for (const row of rows) {
-
       const course_code = String(row['course_code'] || row['Course Code'] || '').trim();
+      const course_name = String(row['course_name'] || row['Course Name'] || '').trim();
+      const semester = String(row['semester'] || row['Semester'] || '').trim();
       const day = String(row['day'] || row['Day'] || '').trim();
       const start_time = String(row['start_time'] || row['Start Time'] || '').trim();
       const end_time = String(row['end_time'] || row['End Time'] || '').trim();
+      const group_name = String(row['group_name'] || row['Group'] || '').trim() || null;
 
       if (!course_code || !day || !start_time || !end_time) {
         errors.push(`Row skipped: missing fields`);
@@ -207,34 +230,45 @@ const uploadCourseSchedule = async (req, res) => {
         continue;
       }
 
-      const [course] = await pool.query(
-        'SELECT id FROM courses WHERE course_code = ? AND instructor_id = ?',
-        [course_code, req.user.id]
+      let courseId;
+      const [existingCourse] = await pool.query(
+        'SELECT id FROM courses WHERE course_code = ? AND instructor_id = ? AND (group_name = ? OR (group_name IS NULL AND ? IS NULL))',
+        [course_code, req.user.id, group_name, group_name]
       );
 
-      if (course.length === 0) {
-        errors.push(`Course not found: ${course_code}`);
-        skipped++;
-        continue;
+      if (existingCourse.length > 0) {
+        courseId = existingCourse[0].id;
+      } else {
+        if (!course_name || !semester) {
+          errors.push(`Course not found and missing course_name/semester to create: ${course_code}`);
+          skipped++;
+          continue;
+        }
+        const uuid = generateUUID();
+        const [result] = await pool.query(
+          'INSERT INTO courses (uuid, course_code, course_name, instructor_id, semester, attendance_threshold, group_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [uuid, course_code, course_name, req.user.id, semester, 70, group_name]
+        );
+        courseId = result.insertId;
+        coursesCreated++;
       }
 
-      // Her ders için ilk satırda eski schedule'ı sil
-      if (!deletedCourses.has(course[0].id)) {
-        await pool.query('DELETE FROM course_schedules WHERE course_id = ?', [course[0].id]);
-        deletedCourses.add(course[0].id);
+      if (!deletedCourses.has(courseId)) {
+        await pool.query('DELETE FROM course_schedules WHERE course_id = ?', [courseId]);
+        deletedCourses.add(courseId);
       }
 
       await pool.query(
         'INSERT INTO course_schedules (course_id, day, start_time, end_time) VALUES (?, ?, ?, ?)',
-        [course[0].id, day, formatTime(start_time), formatTime(end_time)]
+        [courseId, day, formatTime(start_time), formatTime(end_time)]
       );
       created++;
     }
 
     fs.unlinkSync(req.file.path);
 
-    return successResponse(res, { created, skipped, errors },
-      `Schedule uploaded. ${created} entries created.`);
+    return successResponse(res, { created, skipped, coursesCreated, errors },
+      `Schedule uploaded. ${created} entries created, ${coursesCreated} new courses created.`);
   } catch (error) {
     console.error('Upload course schedule error:', error.message);
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);

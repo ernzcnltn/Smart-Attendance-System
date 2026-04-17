@@ -21,9 +21,10 @@ REGISTRATION_CHALLENGES = [
 ]
 
 VERIFICATION_CHALLENGES = [
-    {'id': 'smile', 'instruction': 'Please smile at the camera'},
-    {'id': 'open_mouth', 'instruction': 'Please open your mouth'},
+    {'id': 'move_closer', 'instruction': 'Please move closer to the camera'},
+    {'id': 'move_away', 'instruction': 'Please move away from the camera'},
     {'id': 'raise_eyebrows', 'instruction': 'Please raise your eyebrows'},
+    {'id': 'smile', 'instruction': 'Please smile at the camera'},
 ]
 
 def base64_to_image(base64_string):
@@ -52,8 +53,15 @@ def check_liveness(img_array):
         if len(faces) > 1:
             return False, 'Multiple faces detected. Please ensure only your face is visible.'
         face = faces[0]
+        print(f'is_real: {face.get("is_real")}, antispoof_score: {face.get("antispoof_score")}')
+
         if not face.get('is_real', True):
             return False, 'Liveness check failed. Please use a real face, not a photo or screen.'
+
+        antispoof_score = face.get('antispoof_score', 1)
+        if antispoof_score < 0.95:
+            return False, 'Liveness check failed. Please use a real face, not a photo or screen.'
+
         return True, 'OK'
     except Exception as e:
         print(f'Liveness error: {e}')
@@ -86,7 +94,21 @@ def check_face_coverage(img_array):
     except Exception as e:
         return False, str(e)
 
-def detect_challenge(img_array, challenge_id):
+def get_face_ratio(img_array):
+    try:
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(80, 80))
+        if len(faces) == 0:
+            return None
+        (x, y, w, h) = faces[0]
+        face_area = w * h
+        img_area = img_array.shape[1] * img_array.shape[0]
+        return face_area / img_area
+    except:
+        return None
+
+def detect_challenge(img_array, challenge_id, baseline_ratio=None):
     try:
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
@@ -115,6 +137,14 @@ def detect_challenge(img_array, challenge_id):
         elif challenge_id == 'turn_right':
             center_offset = (face_center_x - img_center_x) / img_width
             return (center_offset > 0.05 or aspect_ratio < 0.03) and face_ratio > 0.06
+
+        elif challenge_id == 'move_closer':
+            # Yüz görüntünün %20'sinden fazlasını kaplıyorsa yakın
+            return face_ratio > 0.20
+
+        elif challenge_id == 'move_away':
+            # Yüz görüntünün %8'inden azını kaplıyorsa uzak
+            return face_ratio < 0.08 and face_ratio > 0.02
 
         elif challenge_id == 'smile':
             smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_smile.xml')

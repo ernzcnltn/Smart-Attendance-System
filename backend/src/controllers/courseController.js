@@ -3,26 +3,42 @@ const { generateUUID, successResponse, errorResponse } = require('../utils/helpe
 const { getSettingByKey } = require('./settingsController');
 
 const createCourse = async (req, res) => {
-  const { course_code, course_name, semester, attendance_threshold } = req.body;
+  const { course_code, course_name, semester, attendance_threshold, schedules, group_name } = req.body;
 
   if (!course_code || !course_name || !semester) {
     return errorResponse(res, 'Course code, name and semester are required.', 400);
   }
 
   try {
-    const [existing] = await pool.query('SELECT id FROM courses WHERE course_code = ?', [course_code]);
+    const [existing] = await pool.query(
+      'SELECT id FROM courses WHERE course_code = ? AND instructor_id = ? AND (group_name = ? OR (group_name IS NULL AND ? IS NULL))',
+      [course_code, req.user.id, group_name || null, group_name || null]
+    );
     if (existing.length > 0) {
-      return errorResponse(res, 'Course code already exists.', 409);
+      return errorResponse(res, 'Course code already exists for this group.', 409);
     }
 
- const uuid = generateUUID();
-const defaultThreshold = await getSettingByKey('default_attendance_threshold');
-const finalThreshold = attendance_threshold || defaultThreshold || 70;
+    const uuid = generateUUID();
+    const defaultThreshold = await getSettingByKey('default_attendance_threshold');
+    const finalThreshold = attendance_threshold || defaultThreshold || 70;
 
-await pool.query(
-  'INSERT INTO courses (uuid, course_code, course_name, instructor_id, semester, attendance_threshold) VALUES (?, ?, ?, ?, ?, ?)',
-  [uuid, course_code, course_name, req.user.id, semester, finalThreshold]
-);
+    const [result] = await pool.query(
+      'INSERT INTO courses (uuid, course_code, course_name, instructor_id, semester, attendance_threshold, group_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [uuid, course_code, course_name, req.user.id, semester, finalThreshold, group_name || null]
+    );
+
+    const courseId = result.insertId;
+
+    if (schedules && schedules.length > 0) {
+      for (const s of schedules) {
+        if (s.day && s.start_time && s.end_time) {
+          await pool.query(
+            'INSERT INTO course_schedules (course_id, day, start_time, end_time) VALUES (?, ?, ?, ?)',
+            [courseId, s.day, s.start_time, s.end_time]
+          );
+        }
+      }
+    }
 
     return successResponse(res, { uuid, course_code, course_name }, 'Course created successfully.', 201);
   } catch (error) {
@@ -34,7 +50,7 @@ await pool.query(
 const getAllCourses = async (req, res) => {
   try {
     const [rows] = await pool.query(`
-      SELECT c.uuid, c.course_code, c.course_name, c.semester, c.attendance_threshold,
+      SELECT c.uuid, c.course_code, c.course_name, c.semester, c.attendance_threshold, c.group_name,
              u.full_name AS instructor_name
       FROM courses c
       JOIN users u ON c.instructor_id = u.id
@@ -54,14 +70,17 @@ const getMyCourses = async (req, res) => {
 
     if (req.user.role === 'instructor') {
       [rows] = await pool.query(`
-        SELECT uuid, course_code, course_name, semester, attendance_threshold
-        FROM courses
-        WHERE instructor_id = ? AND is_active = true
-        ORDER BY created_at DESC
+        SELECT c.uuid, c.course_code, c.course_name, c.semester, c.attendance_threshold, c.group_name,
+               COUNT(ce.student_id) as student_count
+        FROM courses c
+        LEFT JOIN course_enrollments ce ON c.id = ce.course_id
+        WHERE c.instructor_id = ? AND c.is_active = true
+        GROUP BY c.id
+        ORDER BY c.created_at DESC
       `, [req.user.id]);
     } else if (req.user.role === 'student') {
       [rows] = await pool.query(`
-        SELECT c.uuid, c.course_code, c.course_name, c.semester,
+        SELECT c.uuid, c.course_code, c.course_name, c.semester, c.group_name,
                u.full_name AS instructor_name
         FROM courses c
         JOIN course_enrollments ce ON c.id = ce.course_id
@@ -85,7 +104,7 @@ const getCourseByUUID = async (req, res) => {
 
   try {
     const [rows] = await pool.query(`
-      SELECT c.uuid, c.course_code, c.course_name, c.semester, c.attendance_threshold,
+      SELECT c.uuid, c.course_code, c.course_name, c.semester, c.attendance_threshold, c.group_name,
              u.full_name AS instructor_name, u.email AS instructor_email
       FROM courses c
       JOIN users u ON c.instructor_id = u.id
@@ -165,11 +184,29 @@ const getCourseStudents = async (req, res) => {
   }
 };
 
+const deleteCourse = async (req, res) => {
+  const { uuid } = req.params;
+  try {
+    const [course] = await pool.query(
+      'SELECT id FROM courses WHERE uuid = ? AND instructor_id = ?',
+      [uuid, req.user.id]
+    );
+    if (course.length === 0) return errorResponse(res, 'Course not found or access denied.', 404);
+
+    await pool.query('DELETE FROM courses WHERE id = ?', [course[0].id]);
+    return successResponse(res, {}, 'Course deleted successfully.');
+  } catch (error) {
+    console.error('Delete course error:', error.message);
+    return errorResponse(res, 'Failed to delete course.');
+  }
+};
+
 module.exports = {
   createCourse,
   getAllCourses,
   getMyCourses,
   getCourseByUUID,
   enrollStudent,
-  getCourseStudents
+  getCourseStudents,
+  deleteCourse
 };

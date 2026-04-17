@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Card, Button, Badge, Alert, Spinner } from 'react-bootstrap';
+import { Container, Card, Button, Badge, Alert, Spinner, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { getMyNotifications, markNotificationRead, deleteNotification } from '../../services/attendanceService';
 
@@ -8,6 +8,7 @@ const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     fetchNotifications();
@@ -41,15 +42,15 @@ const Notifications = () => {
   const handleDelete = async (id) => {
     try {
       await deleteNotification(id);
-      setNotifications(notifications.filter(n => n.id !== id));
+      setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (err) {}
   };
 
   const handleDeleteAll = async () => {
-    if (!window.confirm('Are you sure you want to delete all notifications?')) return;
     for (const n of notifications) {
       await handleDelete(n.id);
     }
+    setShowConfirm(false);
   };
 
   if (loading) return <Container className="text-center mt-5"><Spinner animation="border" /></Container>;
@@ -69,7 +70,7 @@ const Notifications = () => {
             </Button>
           )}
           {notifications.length > 0 && (
-            <Button variant="outline-danger" size="sm" onClick={handleDeleteAll}>
+            <Button variant="outline-danger" size="sm" onClick={() => setShowConfirm(true)}>
               Delete all
             </Button>
           )}
@@ -123,6 +124,19 @@ const Notifications = () => {
           </Card>
         ))
       )}
+
+      <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Delete All Notifications</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          Are you sure you want to delete all notifications? This action cannot be undone.
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowConfirm(false)}>Cancel</Button>
+          <Button variant="danger" onClick={handleDeleteAll}>Delete All</Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 };

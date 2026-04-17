@@ -18,10 +18,15 @@ const excelStorage = multer.diskStorage({
 const csvUpload = multer({
   storage: csvStorage,
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+    if (
+      file.originalname.endsWith('.xlsx') ||
+      file.originalname.endsWith('.xls') ||
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.mimetype === 'application/vnd.ms-excel'
+    ) {
       cb(null, true);
     } else {
-      cb(new Error('Only CSV files are allowed.'));
+      cb(new Error('Only Excel files are allowed.'));
     }
   }
 });
@@ -44,7 +49,7 @@ const excelUpload = multer({
 
 router.use(authenticate);
 
-router.post('/upload', authorize('admin'), csvUpload.single('file'), uploadTimetable);
+router.post('/upload', authorize('admin'), excelUpload.single('file'), uploadTimetable);
 router.post('/students', authorize('instructor'), excelUpload.single('file'), uploadStudentList);
 router.post('/schedule', authorize('instructor'), excelUpload.single('file'), uploadCourseSchedule);
 router.get('/schedule/:course_uuid', getCourseSchedule);

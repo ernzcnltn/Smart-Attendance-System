@@ -164,27 +164,17 @@ const getChallenge = async (req, res) => {
   const type = req.query.type || 'verification';
   const step = parseInt(req.query.step) || 0;
 
-  const registrationChallenges = [
-    { id: 'look_straight', instruction: 'Look straight at the camera' },
-    { id: 'turn_left', instruction: 'Please turn your head to the left' },
-    { id: 'turn_right', instruction: 'Please turn your head to the right' }
-  ];
-
-  const verificationChallenges = [
-    { id: 'smile', instruction: 'Please smile at the camera' },
-    { id: 'open_mouth', instruction: 'Please open your mouth' },
-    { id: 'raise_eyebrows', instruction: 'Please raise your eyebrows' }
-  ];
-
-  let challenge;
-  if (type === 'registration') {
-    challenge = registrationChallenges[step % registrationChallenges.length];
-  } else {
-    challenge = verificationChallenges[Math.floor(Math.random() * verificationChallenges.length)];
+  try {
+    const response = await axios.get(`${FACE_SERVICE_URL}/challenge`, {
+      params: { type, step }
+    });
+    return successResponse(res, { challenge: response.data.challenge });
+  } catch (error) {
+    console.error('Get challenge error:', error.message);
+    return errorResponse(res, 'Failed to get challenge.');
   }
-
-  return successResponse(res, { challenge });
 };
+
 const checkChallenge = async (req, res) => {
   const { image, challenge_id } = req.body;
   if (!image || !challenge_id) {
