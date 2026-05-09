@@ -5,20 +5,19 @@ const { successResponse, errorResponse } = require('../utils/helpers');
 const FACE_SERVICE_URL = process.env.FACE_SERVICE_URL || 'http://localhost:5001';
 
 const registerFace = async (req, res) => {
-  const { image, challenge_id, step } = req.body;
-
+const { image, challenge_id, step, liveness_frames } = req.body;
   if (!image || !challenge_id) {
     return errorResponse(res, 'Image and challenge are required.', 400);
   }
 
   try {
-    const response = await axios.post(`${FACE_SERVICE_URL}/register`, {
-      student_uuid: req.user.uuid,
-      image,
-      challenge_id,
-      step: step !== undefined ? step : 0
-    });
-
+   const response = await axios.post(`${FACE_SERVICE_URL}/register`, {
+  student_uuid: req.user.uuid,
+  image,
+  challenge_id,
+  step: step !== undefined ? step : 0,
+  liveness_frames: liveness_frames || []
+});
     console.log('Python response:', response.data);
 
     const is_complete = response.data.is_complete;
@@ -44,25 +43,29 @@ const registerFace = async (req, res) => {
   } catch (error) {
     console.error('Register face error:', error.message);
     if (error.response?.data) {
-      return errorResponse(res, error.response.data.message, 400);
-    }
+  return res.status(400).json({
+    success: false,
+    message: error.response.data.message,
+    liveness_failed: error.response.data.liveness_failed || false
+  });
+}
     return errorResponse(res, 'Failed to register face.');
   }
 };
 
 
 const verifyFace = async (req, res) => {
-  const { image, challenge_id } = req.body;
+  const { challenges, liveness_frames } = req.body;
 
-  if (!image || !challenge_id) {
-    return errorResponse(res, 'Image and challenge are required.', 400);
+  if (!challenges || challenges.length < 2) {
+    return errorResponse(res, 'Dual challenge verification required.', 400);
   }
 
   try {
     const response = await axios.post(`${FACE_SERVICE_URL}/verify`, {
       student_uuid: req.user.uuid,
-      image,
-      challenge_id
+      challenges,
+      liveness_frames: liveness_frames || []
     });
 
     if (!response.data.success) {
@@ -76,7 +79,11 @@ const verifyFace = async (req, res) => {
   } catch (error) {
     console.error('Verify face error:', error.message);
     if (error.response?.data) {
-      return errorResponse(res, error.response.data.message, 400);
+      return res.status(400).json({
+        success: false,
+        message: error.response.data.message,
+        liveness_failed: error.response.data.liveness_failed || false
+      });
     }
     return errorResponse(res, 'Failed to verify face.');
   }
@@ -176,18 +183,23 @@ const getChallenge = async (req, res) => {
 };
 
 const checkChallenge = async (req, res) => {
-  const { image, challenge_id } = req.body;
+  const { image, challenge_id, student_uuid } = req.body;
   if (!image || !challenge_id) {
     return errorResponse(res, 'Image and challenge_id are required.', 400);
   }
   try {
     const response = await axios.post(`${FACE_SERVICE_URL}/check-challenge`, {
       image,
-      challenge_id
+      challenge_id,
+      student_uuid: student_uuid || req.user.uuid
     });
+    // Tum flag'leri frontend'e ilet
     return res.status(200).json({
       success: true,
-      detected: response.data.detected
+      detected:       response.data.detected       || false,
+      spoof:          response.data.spoof           || false,
+      multiple_faces: response.data.multiple_faces  || false,
+      wrong_person:   response.data.wrong_person    || false,
     });
   } catch (error) {
     return res.status(200).json({ success: false, detected: false });

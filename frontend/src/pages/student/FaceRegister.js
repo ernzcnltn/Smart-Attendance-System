@@ -7,6 +7,70 @@ import { checkChallenge } from '../../services/faceService';
 import { useAuth } from '../../context/AuthContext';
 
 const TOTAL_STEPS = 3;
+const LIVENESS_FRAMES = 3;
+const LIVENESS_INTERVAL = 500;
+
+// ─── Modal config ───
+const MODALS = {
+  spoof: {
+    title: 'Spoofing Detected',
+    iconClass: 'bi bi-shield-x',
+    heading: 'Real Face Required!',
+    body: 'A photo, screen, or video was detected instead of a real face. The system requires your actual live face for registration.',
+    tips: ['Use your real face, not a photo or screen', 'Do not show a video or recording', 'Ensure good lighting on your face', 'Face the camera directly'],
+    color: '#dc2626'
+  },
+  multiple_faces: {
+    title: 'Multiple People Detected',
+    iconClass: 'bi bi-people-fill',
+    heading: 'Only One Person Allowed!',
+    body: 'More than one face was detected in the camera. Registration requires only the student\'s face to be visible.',
+    tips: ['Ensure only your face is in the frame', 'Ask others to step out of camera view', 'Move to a private location'],
+    color: '#dc2626'
+  },
+  duplicate: {
+    title: 'Face Already Registered',
+    iconClass: 'bi bi-exclamation-triangle-fill',
+    heading: 'This Face Belongs to Another Account!',
+    body: 'The face you are trying to register is already associated with another student account. Each student must register their own face.',
+    tips: ['You cannot register another person\'s face', 'Each face can only be linked to one account', 'Contact your administrator if you believe this is an error'],
+    color: '#dc2626'
+  }
+};
+
+const SecurityModal = ({ modalType, onClose }) => {
+  if (!modalType) return null;
+  const config = MODALS[modalType];
+  return (
+    <Modal show={!!modalType} onHide={onClose} centered>
+      <Modal.Header closeButton style={{ background: config.color, color: 'white', borderBottom: 'none' }}>
+        <Modal.Title style={{ fontSize: '1rem' }}>
+          <i className={config.iconClass} style={{ marginRight: '8px' }} />
+          {config.title}
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="text-center py-4 px-4">
+        <i className={config.iconClass} style={{ fontSize: '3rem', color: config.color, marginBottom: '12px', display: 'block' }} />
+        <h5 className="fw-bold mb-2">{config.heading}</h5>
+        <p className="text-muted mb-4" style={{ fontSize: '0.9rem' }}>{config.body}</p>
+        <div className="text-start p-3 rounded" style={{ background: '#f8f9fa', fontSize: '13px' }}>
+          <strong>What to do:</strong>
+          <ul className="mb-0 mt-2">
+            {config.tips.map((tip, i) => <li key={i}>{tip}</li>)}
+          </ul>
+        </div>
+        <p className="small mt-3 mb-0" style={{ color: config.color }}>
+          ⚠ This attempt has been flagged.
+        </p>
+      </Modal.Body>
+      <Modal.Footer style={{ borderTop: 'none' }}>
+        <Button className="w-100" style={{ background: config.color, border: 'none' }} onClick={onClose}>
+          I understand, try again
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+};
 
 const FaceRegister = ({ onComplete }) => {
   const navigate = useNavigate();
@@ -20,16 +84,15 @@ const FaceRegister = ({ onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [detected, setDetected] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const [spoofingModal, setSpoofingModal] = useState(false);
+  const [activeModal, setActiveModal] = useState(null); // 'spoof' | 'multiple_faces' | 'duplicate'
+  const [livenessStatus, setLivenessStatus] = useState('');
   const intervalRef = useRef(null);
   const registrationComplete = useRef(false);
 
-useEffect(() => {
-  fetchChallenge(0);
-  return () => {
-    stopDetection();
-  };
-}, []);
+  useEffect(() => {
+    fetchChallenge(0);
+    return () => stopDetection();
+  }, []);
 
   useEffect(() => {
     if (challenge && !detected && !loading) {
@@ -42,6 +105,7 @@ useEffect(() => {
     setLoadingChallenge(true);
     setDetected(false);
     setError('');
+    setLivenessStatus('');
     stopDetection();
     try {
       const response = await api.get(`/face/challenge?type=registration&step=${step}`);
@@ -63,15 +127,43 @@ useEffect(() => {
 
         const response = await checkChallenge(imageSrc, challenge.id);
 
+        // Birden fazla yuz
+        if (response.multiple_faces) {
+          stopDetection();
+          setActiveModal('multiple_faces');
+          return;
+        }
+
+        // Spoof tespiti
+        if (response.spoof) {
+          stopDetection();
+          setActiveModal('spoof');
+          return;
+        }
+
         if (response.detected) {
           stopDetection();
           setDetected(true);
           setCapturing(true);
-          await handleAutoRegister(imageSrc);
+          setLivenessStatus('Checking liveness...');
+
+          const livenessFrames = [];
+          for (let i = 0; i < LIVENESS_FRAMES; i++) {
+            await new Promise(r => setTimeout(r, LIVENESS_INTERVAL));
+            const frame = webcamRef.current?.getScreenshot();
+            if (frame) {
+              livenessFrames.push(frame);
+              setLivenessStatus(`Liveness check ${i + 1}/${LIVENESS_FRAMES}...`);
+            }
+          }
+
+          const mainImage = imageSrc;
+          setLivenessStatus('Processing...');
+          await handleAutoRegister(mainImage, livenessFrames);
           setCapturing(false);
         }
       } catch (err) {}
-    }, 3000);
+    }, 1500);
   };
 
   const stopDetection = () => {
@@ -81,52 +173,60 @@ useEffect(() => {
     }
   };
 
-  const handleAutoRegister = async (imageSrc) => {
+  const handleAutoRegister = async (imageSrc, livenessFrames) => {
     setLoading(true);
     setError('');
     try {
       const response = await api.post('/face/register', {
         image: imageSrc,
         challenge_id: challenge.id,
-        step: currentStep
+        step: currentStep,
+        liveness_frames: livenessFrames
       });
 
       const { is_complete, next_step } = response.data.data;
 
       if (is_complete) {
         registrationComplete.current = true;
-        setSuccess('Face registered successfully!');
+        setSuccess('Face registered successfully! Redirecting...');
+        setLivenessStatus('');
         await checkFaceStatus();
         setTimeout(() => {
           if (onComplete) onComplete();
           else navigate('/student');
         }, 3000);
       } else {
-        setCurrentStep(next_step);
-        await fetchChallenge(next_step);
+        setSuccess(`Step ${currentStep + 1} completed!`);
+        setLivenessStatus('');
+        setTimeout(() => {
+          setSuccess('');
+          setCurrentStep(next_step);
+          fetchChallenge(next_step);
+        }, 1000);
       }
     } catch (err) {
       const data = err.response?.data;
       const message = data?.message || 'Failed to register. Please try again.';
+      const msg = message.toLowerCase();
 
-      if (
-        message.toLowerCase().includes('liveness') ||
-        message.toLowerCase().includes('real face') ||
-        message.toLowerCase().includes('photo') ||
-        message.toLowerCase().includes('spoof')
+      if (data?.duplicate_face || msg.includes('another account')) {
+        stopDetection();
+        setActiveModal('duplicate');
+      } else if (
+        data?.liveness_failed ||
+        msg.includes('spoof') || msg.includes('screen') ||
+        msg.includes('real face') || msg.includes('natural movement') ||
+        msg.includes('photo') || msg.includes('video') || msg.includes('display')
       ) {
         stopDetection();
-         setSpoofingModal(true);
-  } else if (data?.duplicate_face) {
-    stopDetection();
-    setError('This face is already registered to another account. Please use your own face.');
-  } else if (data?.face_covered) {
-    setError(message);
-    setDetected(false);
-    startDetection();
-  } else {
-    setError(message);
-    setDetected(false);
+        setActiveModal('spoof');
+      } else if (msg.includes('multiple faces')) {
+        stopDetection();
+        setActiveModal('multiple_faces');
+      } else {
+        setError(message);
+        setDetected(false);
+        setLivenessStatus('');
         startDetection();
       }
     } finally {
@@ -134,10 +234,11 @@ useEffect(() => {
     }
   };
 
-  const handleCloseSpoofingModal = async () => {
-    setSpoofingModal(false);
+  const handleCloseModal = async () => {
+    setActiveModal(null);
     setDetected(false);
     setCapturing(false);
+    setLivenessStatus('');
     await fetchChallenge(currentStep);
   };
 
@@ -165,7 +266,7 @@ useEffect(() => {
           ) : challenge && (
             <Alert variant={detected ? 'success' : 'info'} className="mb-3">
               {detected ? (
-                <><strong>✓ Detected!</strong> Processing...</>
+                <strong>{livenessStatus || 'Detected! Processing...'}</strong>
               ) : (
                 <><strong>Challenge {currentStep + 1}:</strong> {challenge.instruction}</>
               )}
@@ -187,52 +288,41 @@ useEffect(() => {
               style={{ width: '100%', maxWidth: '400px' }}
               videoConstraints={{ facingMode: 'user' }}
               onUserMediaError={() => setError('Camera access denied.')}
+              mirrored={true}
             />
             {!detected && !loading && (
               <div style={{
-                position: 'absolute',
-                bottom: '20px',
-                left: '50%',
+                position: 'absolute', bottom: '20px', left: '50%',
                 transform: 'translateX(-50%)',
-                background: 'rgba(0,0,0,0.6)',
-                color: 'white',
-                padding: '6px 14px',
-                borderRadius: '20px',
-                fontSize: '13px',
-                whiteSpace: 'nowrap'
+                background: 'rgba(0,0,0,0.6)', color: 'white',
+                padding: '6px 14px', borderRadius: '20px',
+                fontSize: '13px', whiteSpace: 'nowrap'
               }}>
-                 Detecting...
+                Detecting...
+              </div>
+            )}
+            {detected && livenessStatus && (
+              <div style={{
+                position: 'absolute', bottom: '20px', left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'rgba(34,197,94,0.8)', color: 'white',
+                padding: '6px 14px', borderRadius: '20px',
+                fontSize: '13px', whiteSpace: 'nowrap'
+              }}>
+                {livenessStatus}
               </div>
             )}
           </div>
 
           <p className="text-muted small">
             Perform the challenge above. Photo will be taken automatically.
+            <br />
+            <small>A liveness check will verify you are a real person.</small>
           </p>
         </Card.Body>
       </Card>
 
-      <Modal show={spoofingModal} onHide={handleCloseSpoofingModal} centered>
-        <Modal.Header closeButton style={{ background: '#dc3545', color: 'white' }}>
-          <Modal.Title> Spoofing Detected</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="text-center py-4">
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚫</div>
-          <h5>Fraudulent Attempt Detected!</h5>
-          <p className="text-muted">
-            A photo or screen was detected instead of a real face.
-            Please use your actual face for registration.
-          </p>
-          <p className="small text-danger">
-            This attempt has been flagged. Continued attempts may result in disciplinary action.
-          </p>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="danger" className="w-100" onClick={handleCloseSpoofingModal}>
-            I understand, try again with my real face
-          </Button>
-        </Modal.Footer>
-      </Modal>
+      <SecurityModal modalType={activeModal} onClose={handleCloseModal} />
     </Container>
   );
 };

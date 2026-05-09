@@ -104,7 +104,7 @@ const SystemSettings = () => {
                   />
                 )}
                 <Button
-                  variant="primary"
+                  variant="danger"
                   size="sm"
                   onClick={() => handleSave(key)}
                   disabled={saving[key]}

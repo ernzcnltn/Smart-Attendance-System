@@ -96,7 +96,7 @@ const downloadTemplate = () => {
           </Form.Group>
 
           <Button
-            variant="primary"
+            variant="danger"
             className="w-100"
             onClick={handleUpload}
             disabled={!file || loading}

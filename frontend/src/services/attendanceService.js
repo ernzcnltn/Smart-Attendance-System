@@ -29,3 +29,8 @@ export const getMyAttendanceStats = async () => {
   const response = await api.get('/attendance/my-stats');
   return response.data.data;
 };
+
+export const getMySessionHistory = async (courseUUID) => {
+  const response = await api.get(`/attendance/my-history/${courseUUID}`);
+  return response.data.data;
+};

@@ -79,7 +79,6 @@ const AppNavbar = () => {
     { to: '/student', icon: <HouseFill size={18} />, label: 'Dashboard' },
     { to: '/student/courses', icon: <BookFill size={18} />, label: 'My Courses' },
     { to: '/student/attendance', icon: <ClipboardDataFill size={18} />, label: 'My Attendance' },
-    { to: '/student/face-attendance', icon: <CameraFill size={18} />, label: 'Take Attendance' },
     { to: '/student/profile', icon: <PersonFill size={18} />, label: 'Profile' },
   ];
 
@@ -100,7 +99,7 @@ const AppNavbar = () => {
         className="mb-4 px-3 d-flex align-items-center justify-content-between"
         style={{
           height: '60px',
-          backgroundColor: darkMode ? '#1a1a1a' : '#212529',
+         backgroundColor: darkMode ? '#b71c1c' : '#b71c1c',
           position: 'sticky',
           top: 0,
           zIndex: 1000
@@ -243,7 +242,7 @@ const AppNavbar = () => {
           left: showSidebar ? 0 : '-280px',
           width: '280px',
           height: '100vh',
-          background: darkMode ? '#1a1a1a' : '#212529',
+          background: darkMode ? '#1a1a1a' : '#1a1a1a',
           zIndex: 2001,
           transition: 'left 0.3s ease',
           display: 'flex',

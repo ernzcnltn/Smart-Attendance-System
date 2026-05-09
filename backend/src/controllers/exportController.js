@@ -6,10 +6,14 @@ const exportAttendanceExcel = async (req, res) => {
   const { course_uuid } = req.params;
 
   try {
-    const [course] = await pool.query(
-      'SELECT id, course_code, course_name, semester FROM courses WHERE uuid = ?',
-      [course_uuid]
-    );
+  const [course] = await pool.query(
+  `SELECT c.id, c.course_code, c.course_name, c.semester, c.attendance_threshold,
+          u.full_name as instructor_name
+   FROM courses c
+   LEFT JOIN users u ON c.instructor_id = u.id
+   WHERE c.uuid = ?`,
+  [course_uuid]
+);
     if (course.length === 0) return res.status(404).json({ success: false, message: 'Course not found.' });
 
     const [records] = await pool.query(`
@@ -80,9 +84,13 @@ const exportAttendancePDF = async (req, res) => {
 
   try {
     const [course] = await pool.query(
-      'SELECT id, course_code, course_name, semester, attendance_threshold FROM courses WHERE uuid = ?',
-      [course_uuid]
-    );
+  `SELECT c.id, c.course_code, c.course_name, c.semester, c.attendance_threshold,
+          u.full_name as instructor_name
+   FROM courses c
+   LEFT JOIN users u ON c.instructor_id = u.id
+   WHERE c.uuid = ?`,
+  [course_uuid]
+);
     if (course.length === 0) return res.status(404).json({ success: false, message: 'Course not found.' });
 
     const [sessions] = await pool.query(
@@ -114,6 +122,8 @@ const exportAttendancePDF = async (req, res) => {
     doc.fontSize(11).font('Helvetica')
       .text(`Semester: ${course[0].semester}`, { align: 'center' });
     doc.text(`Total Sessions: ${sessions[0].total} | Threshold: ${course[0].attendance_threshold}%`, { align: 'center' });
+    doc.text(`Instructor: ${course[0].instructor_name}`, { align: 'center' });
+    doc.text(`Generated: ${new Date().toLocaleString('en-GB')}`, { align: 'center' });
     doc.moveDown();
 
     doc.moveTo(40, doc.y).lineTo(570, doc.y).stroke();
@@ -227,13 +237,15 @@ const exportSessionAttendancePDF = async (req, res) => {
   const { session_uuid } = req.params;
 
   try {
-    const [session] = await pool.query(`
-      SELECT cs.id, cs.session_date, cs.start_time, cs.end_time,
-             c.course_code, c.course_name, c.semester, c.attendance_threshold
-      FROM class_sessions cs
-      JOIN courses c ON cs.course_id = c.id
-      WHERE cs.uuid = ?
-    `, [session_uuid]);
+   const [session] = await pool.query(`
+  SELECT cs.id, cs.session_date, cs.start_time, cs.end_time,
+         c.course_code, c.course_name, c.semester, c.attendance_threshold,
+         u.full_name as instructor_name
+  FROM class_sessions cs
+  JOIN courses c ON cs.course_id = c.id
+  JOIN users u ON c.instructor_id = u.id
+  WHERE cs.uuid = ?
+`, [session_uuid]);
 
     if (session.length === 0) return res.status(404).json({ success: false, message: 'Session not found.' });
 
@@ -259,6 +271,8 @@ const exportSessionAttendancePDF = async (req, res) => {
       .text(`Semester: ${session[0].semester}`, { align: 'center' });
     doc.text(`Session Date: ${new Date(session[0].session_date).toLocaleDateString('en-GB')} | Time: ${session[0].start_time} - ${session[0].end_time}`, { align: 'center' });
     doc.text(`Total Attended: ${records.length}`, { align: 'center' });
+   doc.text(`Instructor: ${session[0].instructor_name}`, { align: 'center' });
+doc.text(`Generated: ${new Date().toLocaleString('en-GB')}`, { align: 'center' });
     doc.moveDown();
 
     doc.moveTo(40, doc.y).lineTo(570, doc.y).stroke();

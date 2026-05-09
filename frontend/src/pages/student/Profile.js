@@ -1,8 +1,32 @@
-import React, { useState } from 'react';
-import { Container, Card, Form, Button, Alert, Spinner, Row, Col } from 'react-bootstrap';
+import React, { useState, useMemo } from 'react';
+import { Container, Card, Form, Button, Alert, Spinner, Row, Col, InputGroup } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
-import { PersonFill, LockFill, ShieldFill } from 'react-bootstrap-icons';
+import { PersonFill, LockFill, ShieldFill, EyeFill, EyeSlashFill, CheckCircleFill, XCircleFill } from 'react-bootstrap-icons';
 import api from '../../services/api';
+
+const passwordRules = [
+  { label: 'At least 6 characters',      test: (p) => p.length >= 6 },
+  { label: 'At most 15 characters',       test: (p) => p.length <= 15 },
+  { label: 'At least one uppercase letter', test: (p) => /[A-Z]/.test(p) },
+  { label: 'At least one number',         test: (p) => /[0-9]/.test(p) },
+];
+
+const PasswordCriteria = ({ password }) => {
+  if (!password) return null;
+  return (
+    <div style={{ marginTop: '8px', padding: '10px 14px', background: 'var(--bs-secondary-bg)', borderRadius: '8px', border: '1px solid var(--bs-border-color)' }}>
+      {passwordRules.map((rule, i) => {
+        const ok = rule.test(password);
+        return (
+          <div key={i} className="d-flex align-items-center gap-2 mb-1" style={{ fontSize: '12px' }}>
+            {ok ? <CheckCircleFill size={12} color="#16a34a" /> : <XCircleFill size={12} color="#dc2626" />}
+            <span style={{ color: ok ? '#16a34a' : '#dc2626' }}>{rule.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 const Profile = () => {
   const { user } = useAuth();
@@ -10,21 +34,20 @@ const Profile = () => {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const allRulesPassed = useMemo(() => passwordRules.every(r => r.test(passwordForm.new_password)), [passwordForm.new_password]);
+  const passwordsMatch = passwordForm.new_password === passwordForm.confirm_password;
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     setPasswordError('');
     setPasswordSuccess('');
 
-    if (passwordForm.new_password !== passwordForm.confirm_password) {
-      return setPasswordError('New passwords do not match.');
-    }
-    if (passwordForm.new_password.length < 6) {
-      return setPasswordError('New password must be at least 6 characters.');
-    }
-    if (passwordForm.new_password.length > 15) {
-      return setPasswordError('New password must be at most 15 characters.');
-    }
+    if (!allRulesPassed) return setPasswordError('Please meet all password requirements.');
+    if (!passwordsMatch) return setPasswordError('New passwords do not match.');
 
     setLoading(true);
     try {
@@ -41,14 +64,22 @@ const Profile = () => {
     }
   };
 
+  const eyeStyle = {
+    background: 'var(--bs-body-bg)',
+    border: '1px solid var(--bs-border-color)',
+    borderLeft: 'none',
+    borderRadius: '0 6px 6px 0',
+    color: '#888'
+  };
+
   return (
     <Container>
-      <h4 className="mb-4">My Profile</h4>
+      <h4 className="mb-4 fw-bold">My Profile</h4>
 
       <Row className="g-4">
         {/* Personal Info */}
         <Col md={6}>
-          <Card className="shadow-sm border-0 h-100">
+          <Card className="shadow-sm border-0 h-100" style={{ borderRadius: '14px' }}>
             <Card.Header className="border-bottom py-3 d-flex align-items-center gap-2">
               <PersonFill size={18} />
               <strong>Personal Information</strong>
@@ -65,76 +96,108 @@ const Profile = () => {
                   {user?.full_name?.charAt(0).toUpperCase()}
                 </div>
                 <h5 className="mb-0">{user?.full_name}</h5>
-                <p className="text-muted small">{user?.role}</p>
+                <p className="text-muted small text-capitalize">{user?.role}</p>
               </div>
 
-              <div className="mb-3">
-                <label className="text-muted small">Full Name</label>
-                <p className="fw-semibold mb-0">{user?.full_name}</p>
-              </div>
-              <hr />
-              <div className="mb-3">
-                <label className="text-muted small">Email</label>
-                <p className="fw-semibold mb-0">{user?.email}</p>
-              </div>
-              <hr />
-              <div className="mb-3">
-                <label className="text-muted small">Student Number</label>
-                <p className="fw-semibold mb-0">{user?.student_number || '—'}</p>
-              </div>
-              <hr />
-              <div>
-                <label className="text-muted small">Role</label>
-                <p className="fw-semibold mb-0 text-capitalize">{user?.role}</p>
-              </div>
+              {[
+                { label: 'Full Name',       value: user?.full_name },
+                { label: 'Email',           value: user?.email },
+                { label: 'Student Number',  value: user?.student_number || '—' },
+                { label: 'Role',            value: user?.role },
+              ].map((item, i, arr) => (
+                <div key={i}>
+                  <div className="mb-3">
+                    <label className="text-muted small">{item.label}</label>
+                    <p className="fw-semibold mb-0 text-capitalize">{item.value}</p>
+                  </div>
+                  {i < arr.length - 1 && <hr />}
+                </div>
+              ))}
             </Card.Body>
           </Card>
         </Col>
 
         {/* Change Password */}
         <Col md={6}>
-          <Card className="shadow-sm border-0 h-100">
+          <Card className="shadow-sm border-0 h-100" style={{ borderRadius: '14px' }}>
             <Card.Header className="border-bottom py-3 d-flex align-items-center gap-2">
               <LockFill size={18} />
               <strong>Change Password</strong>
             </Card.Header>
             <Card.Body>
-              {passwordError && <Alert variant="danger" className="py-2 small">{passwordError}</Alert>}
-              {passwordSuccess && <Alert variant="success" className="py-2 small">{passwordSuccess}</Alert>}
+              {passwordError && <Alert variant="danger" className="py-2 small" style={{ borderRadius: '8px' }}>{passwordError}</Alert>}
+              {passwordSuccess && <Alert variant="success" className="py-2 small" style={{ borderRadius: '8px' }}>{passwordSuccess}</Alert>}
 
               <Form onSubmit={handlePasswordChange}>
+                {/* Current Password */}
                 <Form.Group className="mb-3">
-                  <Form.Label>Current Password</Form.Label>
-                  <Form.Control
-                    type="password"
-                    value={passwordForm.current_password}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
-                    maxLength={15}
-                    required
-                  />
+                  <Form.Label className="small fw-semibold">Current Password</Form.Label>
+                  <InputGroup>
+                    <Form.Control
+                      type={showCurrent ? 'text' : 'password'}
+                      value={passwordForm.current_password}
+                      onChange={e => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
+                      maxLength={15} required
+                      style={{ borderRadius: '6px 0 0 6px', borderRight: 'none' }}
+                    />
+                    <Button variant="link" onClick={() => setShowCurrent(!showCurrent)} tabIndex={-1} style={eyeStyle}>
+                      {showCurrent ? <EyeSlashFill size={14} /> : <EyeFill size={14} />}
+                    </Button>
+                  </InputGroup>
                 </Form.Group>
+
+                {/* New Password */}
                 <Form.Group className="mb-3">
-                  <Form.Label>New Password</Form.Label>
-                  <Form.Control
-                    type="password"
-                    value={passwordForm.new_password}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
-                    maxLength={15}
-                    required
-                  />
-                  <Form.Text className="text-muted">6-15 characters</Form.Text>
+                  <Form.Label className="small fw-semibold">New Password</Form.Label>
+                  <InputGroup>
+                    <Form.Control
+                      type={showNew ? 'text' : 'password'}
+                      value={passwordForm.new_password}
+                      onChange={e => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+                      maxLength={15} required
+                      style={{ borderRadius: '6px 0 0 6px', borderRight: 'none' }}
+                    />
+                    <Button variant="link" onClick={() => setShowNew(!showNew)} tabIndex={-1} style={eyeStyle}>
+                      {showNew ? <EyeSlashFill size={14} /> : <EyeFill size={14} />}
+                    </Button>
+                  </InputGroup>
+                  <PasswordCriteria password={passwordForm.new_password} />
                 </Form.Group>
+
+                {/* Confirm Password */}
                 <Form.Group className="mb-4">
-                  <Form.Label>Confirm New Password</Form.Label>
-                  <Form.Control
-                    type="password"
-                    value={passwordForm.confirm_password}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
-                    maxLength={15}
-                    required
-                  />
+                  <Form.Label className="small fw-semibold">Confirm New Password</Form.Label>
+                  <InputGroup>
+                    <Form.Control
+                      type={showConfirm ? 'text' : 'password'}
+                      value={passwordForm.confirm_password}
+                      onChange={e => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
+                      maxLength={15} required
+                      style={{ borderRadius: '6px 0 0 6px', borderRight: 'none' }}
+                    />
+                    <Button variant="link" onClick={() => setShowConfirm(!showConfirm)} tabIndex={-1} style={eyeStyle}>
+                      {showConfirm ? <EyeSlashFill size={14} /> : <EyeFill size={14} />}
+                    </Button>
+                  </InputGroup>
+                  {passwordForm.confirm_password && !passwordsMatch && (
+                    <div className="d-flex align-items-center gap-1 mt-1" style={{ fontSize: '12px', color: '#dc2626' }}>
+                      <XCircleFill size={12} /> Passwords do not match
+                    </div>
+                  )}
+                  {passwordForm.confirm_password && passwordsMatch && allRulesPassed && (
+                    <div className="d-flex align-items-center gap-1 mt-1" style={{ fontSize: '12px', color: '#16a34a' }}>
+                      <CheckCircleFill size={12} /> Passwords match
+                    </div>
+                  )}
                 </Form.Group>
-                <Button type="submit" variant="danger" className="w-100" disabled={loading}>
+
+                <Button
+                  type="submit"
+                  variant="danger"
+                  className="w-100"
+                  disabled={loading || !allRulesPassed || !passwordsMatch}
+                  style={{ borderRadius: '10px', fontWeight: 600 }}
+                >
                   {loading ? <Spinner size="sm" /> : 'Change Password'}
                 </Button>
               </Form>

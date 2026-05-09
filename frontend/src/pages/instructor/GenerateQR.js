@@ -101,7 +101,7 @@ const GenerateQR = () => {
                   QR code will expire after this duration.
                 </Form.Text>
               </Form.Group>
-              <Button type="submit" variant="primary" className="w-100" disabled={loading}>
+              <Button type="submit" variant="danger" className="w-100" disabled={loading}>
                 {loading ? <Spinner size="sm" /> : 'Start Session & Generate QR'}
               </Button>
             </Form>

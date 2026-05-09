@@ -6,7 +6,8 @@ const {
   getMyNotifications,
   markNotificationRead,
   deleteNotification,
-  getMyAttendanceStats
+  getMyAttendanceStats,
+  getMySessionHistory
 } = require('../controllers/attendanceController');
 const { authenticate, authorize } = require('../middleware/auth');
 
@@ -18,5 +19,6 @@ router.get('/notifications', getMyNotifications);
 router.patch('/notifications/:id/read', markNotificationRead);
 router.delete('/notifications/:id', deleteNotification);
 router.get('/my-stats', getMyAttendanceStats);
+router.get('/my-history/:course_uuid', authenticate, getMySessionHistory);
 
 module.exports = router;

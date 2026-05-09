@@ -1,11 +1,10 @@
-import axios from 'axios';
+import api from './api';
 
-const FACE_SERVICE_URL = process.env.REACT_APP_FACE_SERVICE_URL || 'http://localhost:5001';
-
-const checkChallenge = async (image, challenge_id) => {
-  const response = await axios.post(`${FACE_SERVICE_URL}/check-challenge`, {
+const checkChallenge = async (image, challenge_id, student_uuid = null) => {
+  const response = await api.post('/face/check-challenge', {
     image,
-    challenge_id
+    challenge_id,
+    student_uuid
   });
   return response.data;
 };

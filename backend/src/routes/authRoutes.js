@@ -1,15 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const passport = require('../config/passport');
-const { login, getMe, searchStudents, googleCallback, completeGoogleRegistration,changePassword } = require('../controllers/authController');
+const { login, getMe, searchStudents, googleCallback, completeGoogleRegistration, changePassword, forgotPassword, resetPassword ,bulkRegister} = require('../controllers/authController');
 const { authenticate, authorize } = require('../middleware/auth');
 
+router.post('/bulk-register', authenticate, authorize('admin'), bulkRegister);
 router.post('/login', login);
 router.get('/me', authenticate, getMe);
 router.get('/students/search', authenticate, authorize('instructor', 'admin'), searchStudents);
 router.post('/google/complete', completeGoogleRegistration);
 router.post('/change-password', authenticate, changePassword);
-
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 router.get('/google', passport.authenticate('google', {
   scope: ['profile', 'email'],
   session: false
@@ -39,5 +41,7 @@ router.get('/google/callback',
     })(req, res, next);
   }
 );
+
+
 
 module.exports = router;

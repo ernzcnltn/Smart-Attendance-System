@@ -19,7 +19,7 @@ const getDistanceMeters = (lat1, lng1, lat2, lng2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const ScanQR = () => {
+const ScanQR = ({ expectedCourseUUID }) => {
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -96,14 +96,21 @@ const ScanQR = () => {
           setScanning(false);
           try {
             const parsed = JSON.parse(decodedText);
-            await api.post('/sessions/attend', {
-              session_uuid: parsed.session_uuid,
-              qr_token: parsed.qr_token,
-              latitude: location.latitude,
-              longitude: location.longitude
-            });
-            setSuccess('Attendance marked successfully!');
-            setDone(true);
+           const response = await api.post('/sessions/attend', {
+  session_uuid: parsed.session_uuid,
+  qr_token: parsed.qr_token,
+  latitude: location.latitude,
+  longitude: location.longitude,
+  expected_course_uuid: expectedCourseUUID || null
+});
+const courseCode = response.data?.data?.course_code || '';
+const courseName = response.data?.data?.course_name || '';
+if (courseCode) {
+  setSuccess(`Attendance marked for ${courseCode} - ${courseName}`);
+} else {
+  setSuccess('Attendance marked successfully!');
+}
+setDone(true);
           } catch (err) {
             setError(err.response?.data?.message || 'Invalid QR code or attendance already marked.');
           }

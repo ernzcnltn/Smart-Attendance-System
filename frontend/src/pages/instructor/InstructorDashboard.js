@@ -8,7 +8,7 @@ import { PeopleFill, GridFill, PlayCircleFill, StopCircleFill, UpcScan, CloudUpl
 import api from '../../services/api';
 import * as XLSX from 'xlsx';
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 10;
 
 const InstructorDashboard = () => {
   const { user } = useAuth();
@@ -180,11 +180,11 @@ const InstructorDashboard = () => {
           </p>
         </div>
         <div className="d-flex gap-2">
-          <Button variant="outline-warning" onClick={() => setShowScheduleModal(true)} className="d-flex align-items-center gap-1">
-            <CloudUploadFill size={14} /> Upload Schedule
+      <Button variant="danger" onClick={() => setShowScheduleModal(true)} className="d-flex align-items-center gap-1">
+                Upload Schedule
           </Button>
           <Button variant="danger" onClick={() => navigate('/instructor/courses/new')}>
-            + New Course
+            New Course
           </Button>
         </div>
       </div>
@@ -192,7 +192,7 @@ const InstructorDashboard = () => {
       {/* Stats */}
       <Row className="mb-4 g-3">
         <Col md={4}>
-          <Card className="shadow-sm border-0 h-100" style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)' }}>
+          <Card className="shadow-sm border-0 h-100" style={{background: 'linear-gradient(135deg, #b71c1c, #c62828)' }}>
             <Card.Body className="d-flex align-items-center gap-3 py-4">
               <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '14px' }}>
                 <GridFill size={28} color="white" />
@@ -205,7 +205,7 @@ const InstructorDashboard = () => {
           </Card>
         </Col>
         <Col md={4}>
-          <Card className="shadow-sm border-0 h-100" style={{ background: 'linear-gradient(135deg, #0f3460, #533483)' }}>
+          <Card className="shadow-sm border-0 h-100" style={{background: 'linear-gradient(135deg, #d32f2f, #e53935)' }}>
             <Card.Body className="d-flex align-items-center gap-3 py-4">
               <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '14px' }}>
                 <PeopleFill size={28} color="white" />
@@ -218,7 +218,7 @@ const InstructorDashboard = () => {
           </Card>
         </Col>
         <Col md={4}>
-          <Card className="shadow-sm border-0 h-100" style={{ background: activeLiveCount > 0 ? 'linear-gradient(135deg, #c0392b, #e74c3c)' : 'linear-gradient(135deg, #1e3c72, #2a5298)' }}>
+          <Card className="shadow-sm border-0 h-100" style={{ background: activeLiveCount > 0 ? 'linear-gradient(135deg, #c0392b, #e74c3c)' : 'linear-gradient(135deg, #e53935, #ef5350)' }}>
             <Card.Body className="d-flex align-items-center gap-3 py-4">
               <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '14px' }}>
                 <UpcScan size={28} color="white" />
@@ -280,12 +280,12 @@ const InstructorDashboard = () => {
                     </div>
                   </div>
                   <div className="d-flex gap-2">
-                    <Button size="sm" variant="outline-secondary" className="flex-fill" onClick={() => navigate(`/instructor/courses/${c.uuid}`)}>
+                    <Button size="sm" variant="secondary" className="flex-fill" onClick={() => navigate(`/instructor/courses/${c.uuid}`)}>
                       Manage
                     </Button>
                     <Button
                       size="sm"
-                      variant={isLive ? 'danger' : 'primary'}
+                      variant={isLive ? 'danger' : 'secondary'}
                       className="flex-fill d-flex align-items-center justify-content-center gap-1"
                       onClick={() => handleGenerateQR(c)}
                     >
@@ -293,7 +293,7 @@ const InstructorDashboard = () => {
                     </Button>
                     <Button
                       size="sm"
-                      variant="outline-danger"
+                      variant="danger"
                       onClick={(e) => { e.stopPropagation(); handleDeleteCourse(c); }}
                     >
                       <TrashFill size={14} />
@@ -315,7 +315,7 @@ const InstructorDashboard = () => {
                 <Button
                   key={page}
                   size="sm"
-                  variant={currentPage === page ? 'primary' : 'outline-secondary'}
+                  variant={currentPage === page ? 'danger' : 'outline-secondary'}
                   onClick={() => setCurrentPage(page)}
                 >
                   {page}
@@ -389,7 +389,7 @@ const InstructorDashboard = () => {
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowScheduleModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={handleScheduleUpload} disabled={uploadLoading}>
+          <Button variant="danger" onClick={handleScheduleUpload} disabled={uploadLoading}>
             {uploadLoading ? <Spinner size="sm" /> : 'Upload'}
           </Button>
         </Modal.Footer>

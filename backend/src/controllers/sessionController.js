@@ -62,8 +62,35 @@ const generateQR = async (req, res) => {
       return errorResponse(res, 'Course not found or access denied.', 404);
     }
 
+    // Check if course has a scheduled class right now
+    const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const now = new Date();
+    const todayName = DAYS[now.getDay()];
+    const currentTime = now.toTimeString().split(' ')[0];
+
+    const [schedules] = await pool.query(
+      `SELECT day, start_time, end_time FROM course_schedules 
+       WHERE course_id = ? AND day = ?`,
+      [course[0].id, todayName]
+    );
+
+    if (schedules.length === 0) {
+      return errorResponse(res, `No class scheduled for ${todayName}. QR code can only be generated during scheduled class hours.`, 400);
+    }
+
+    const isWithinSchedule = schedules.some(s => {
+      const start = s.start_time.length === 5 ? `${s.start_time}:00` : s.start_time;
+      const end = s.end_time.length === 5 ? `${s.end_time}:00` : s.end_time;
+      return currentTime >= start && currentTime <= end;
+    });
+
+    if (!isWithinSchedule) {
+      const times = schedules.map(s => `${s.start_time.substring(0,5)} - ${s.end_time.substring(0,5)}`).join(', ');
+      return errorResponse(res, `Class is not in session right now. Today's schedule: ${times}`, 400);
+    }
+   
     const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+
     const startTime = now.toTimeString().split(' ')[0];
     const endTime = new Date(Date.now() + duration_minutes * 60 * 1000).toTimeString().split(' ')[0];
 
@@ -207,6 +234,34 @@ const markAttendance = async (req, res) => {
       return errorResponse(res, 'You are not enrolled in this course.', 403);
     }
 
+    // Check if QR belongs to the expected course
+    const { expected_course_uuid } = req.body;
+    if (expected_course_uuid) {
+      const [expectedCourse] = await pool.query(
+        'SELECT id FROM courses WHERE uuid = ?',
+        [expected_course_uuid]
+      );
+      if (expectedCourse.length > 0 && expectedCourse[0].id !== session.course_id) {
+        const [actualCourse] = await pool.query(
+          'SELECT course_code, course_name FROM courses WHERE id = ?',
+          [session.course_id]
+        );
+        const actualName = actualCourse.length > 0 
+          ? `${actualCourse[0].course_code} - ${actualCourse[0].course_name}` 
+          : 'another course';
+        return errorResponse(res, `This QR code belongs to ${actualName}. Please scan the correct QR code for your course.`, 400);
+      }
+    }
+
+    // Get course info for the session
+    const [courseInfo] = await pool.query(
+      'SELECT course_code, course_name FROM courses WHERE id = ?',
+      [session.course_id]
+    );
+    const courseName = courseInfo.length > 0 
+      ? `${courseInfo[0].course_code} - ${courseInfo[0].course_name}` 
+      : 'Unknown Course';
+
     const [existing] = await pool.query(
       'SELECT id FROM attendance_records WHERE student_id = ? AND session_id = ?',
       [req.user.id, session.id]
@@ -220,8 +275,11 @@ const markAttendance = async (req, res) => {
       [req.user.id, session.id, 'qr']
     );
 
-    return successResponse(res, {}, 'Attendance marked successfully.');
-  } catch (error) {
+return successResponse(res, { 
+      course_code: courseInfo[0]?.course_code,
+      course_name: courseInfo[0]?.course_name 
+    }, 'Attendance marked successfully.');
+    } catch (error) {
     console.error('Mark attendance error:', error.message);
     return errorResponse(res, 'Failed to mark attendance.');
   }
@@ -267,10 +325,12 @@ const getMyAttendance = async (req, res) => {
     const [records] = await pool.query(`
       SELECT c.course_code, c.course_name,
              cs.session_date, cs.start_time, cs.end_time,
-             ar.marked_at, ar.method
+             ar.marked_at, ar.method,
+             u.full_name as instructor_name
       FROM attendance_records ar
       JOIN class_sessions cs ON ar.session_id = cs.id
       JOIN courses c ON cs.course_id = c.id
+      JOIN users u ON c.instructor_id = u.id
       WHERE ar.student_id = ?
       ORDER BY ar.marked_at DESC
     `, [req.user.id]);
@@ -343,6 +403,8 @@ const getActiveSession = async (req, res) => {
 
     const now = new Date();
     const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+
+    
 
     const [sessions] = await pool.query(
       `SELECT uuid, qr_token, qr_expires_at, start_time, end_time, session_date

@@ -199,10 +199,42 @@ const deleteNotification = async (req, res) => {
   }
 };
 
+const getMySessionHistory = async (req, res) => {
+  const { course_uuid } = req.params;
+  try {
+    const [course] = await pool.query(
+      'SELECT c.id FROM courses c JOIN course_enrollments ce ON c.id = ce.course_id WHERE c.uuid = ? AND ce.student_id = ?',
+      [course_uuid, req.user.id]
+    );
+    if (course.length === 0) {
+      return errorResponse(res, 'Course not found or not enrolled.', 404);
+    }
+
+    const courseId = course[0].id;
+
+    const [sessions] = await pool.query(`
+      SELECT
+        cs.id,
+        cs.session_date,
+        CASE WHEN ar.id IS NOT NULL THEN 1 ELSE 0 END as attended
+      FROM class_sessions cs
+      LEFT JOIN attendance_records ar ON ar.session_id = cs.id AND ar.student_id = ?
+      WHERE cs.course_id = ?
+      ORDER BY cs.session_date ASC
+    `, [req.user.id, courseId]);
+
+    return successResponse(res, sessions);
+  } catch (error) {
+    console.error('Get session history error:', error.message);
+    return errorResponse(res, 'Failed to fetch session history.');
+  }
+};
+
 module.exports = {
   getAttendanceStats,
   getMyAttendanceStats,
   sendLowAttendanceNotifications,
+  getMySessionHistory,
   getMyNotifications,
   markNotificationRead,
   deleteNotification

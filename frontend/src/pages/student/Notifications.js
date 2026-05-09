@@ -32,10 +32,17 @@ const Notifications = () => {
     } catch (err) {}
   };
 
-  const handleMarkAllRead = async () => {
+ const handleMarkAllRead = async () => {
     const unread = notifications.filter(n => !n.is_read);
-    for (const n of unread) {
-      await handleMarkRead(n.id);
+    
+    if (unread.length === 0) return;
+
+    try {
+      await Promise.all(unread.map(n => markNotificationRead(n.id)));
+      
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
+    } catch (err) {
+      setError('Failed to mark all as read.');
     }
   };
 
@@ -99,7 +106,7 @@ const Notifications = () => {
                 <div className="ms-3 d-flex align-items-center gap-2">
                   {!n.is_read ? (
                     <>
-                      <Badge bg="warning" text="dark">New</Badge>
+                      <Badge bg="danger" text="light">New</Badge>
                       <Button
                         variant="outline-secondary"
                         size="sm"

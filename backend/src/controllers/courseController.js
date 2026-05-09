@@ -201,6 +201,44 @@ const deleteCourse = async (req, res) => {
   }
 };
 
+ 
+const updateCourse = async (req, res) => {
+  const { uuid } = req.params;
+  const { course_code, course_name, semester, attendance_threshold, schedules } = req.body;
+
+  try {
+    const [course] = await pool.query(
+      'SELECT id FROM courses WHERE uuid = ? AND instructor_id = ?',
+      [uuid, req.user.id]
+    );
+    if (course.length === 0) return errorResponse(res, 'Course not found or access denied.', 404);
+
+    const courseId = course[0].id;
+
+    await pool.query(
+      'UPDATE courses SET course_code = ?, course_name = ?, semester = ?, attendance_threshold = ? WHERE id = ?',
+      [course_code, course_name, semester, attendance_threshold, courseId]
+    );
+
+    if (schedules && schedules.length > 0) {
+      await pool.query('DELETE FROM course_schedules WHERE course_id = ?', [courseId]);
+      for (const s of schedules) {
+        if (s.day && s.start_time && s.end_time) {
+          await pool.query(
+            'INSERT INTO course_schedules (course_id, day, start_time, end_time) VALUES (?, ?, ?, ?)',
+            [courseId, s.day, s.start_time, s.end_time]
+          );
+        }
+      }
+    }
+
+    return successResponse(res, {}, 'Course updated successfully.');
+  } catch (error) {
+    console.error('Update course error:', error.message);
+    return errorResponse(res, 'Failed to update course.');
+  }
+};
+
 module.exports = {
   createCourse,
   getAllCourses,
@@ -208,5 +246,6 @@ module.exports = {
   getCourseByUUID,
   enrollStudent,
   getCourseStudents,
-  deleteCourse
+  deleteCourse,
+  updateCourse
 };

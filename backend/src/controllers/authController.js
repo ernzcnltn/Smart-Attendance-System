@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { generateUUID, generateToken, successResponse, errorResponse } = require('../utils/helpers');
-const { sendWelcomeMail } = require('../utils/mailer');
+const { sendWelcomeMail, sendPasswordResetMail } = require('../utils/mailer');
 
 const register = async (req, res) => {
   const { full_name, email, password, role, student_number } = req.body;
@@ -200,4 +200,141 @@ const changePassword = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getMe, searchStudents, completeGoogleRegistration,changePassword };
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  if (!email) return errorResponse(res, 'Email is required.', 400);
+
+  try {
+    const [rows] = await pool.query(
+      'SELECT id, full_name, email FROM users WHERE email = ? AND is_active = true',
+      [email]
+    );
+
+    // Kullanici bulunamasa bile ayni mesaji don (security best practice)
+    if (rows.length === 0) {
+      return successResponse(res, {}, 'If this email exists, a reset link has been sent.');
+    }
+
+    const user = rows[0];
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 saat
+
+    // Onceki tokenları temizle
+    await pool.query('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
+
+    // Yeni token kaydet
+    await pool.query(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
+      [user.id, token, expiresAt]
+    );
+
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    await sendPasswordResetMail(user.email, user.full_name, resetLink);
+
+    return successResponse(res, {}, 'If this email exists, a reset link has been sent.');
+  } catch (error) {
+    console.error('Forgot password error:', error.message);
+    return errorResponse(res, 'Failed to process request.');
+  }
+};
+
+const resetPassword = async (req, res) => {
+  const { token, new_password } = req.body;
+
+  if (!token || !new_password) {
+    return errorResponse(res, 'Token and new password are required.', 400);
+  }
+
+  if (new_password.length < 6 || new_password.length > 15) {
+    return errorResponse(res, 'Password must be 6-15 characters.', 400);
+  }
+
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM password_reset_tokens WHERE token = ? AND expires_at > NOW()',
+      [token]
+    );
+
+    if (rows.length === 0) {
+      return errorResponse(res, 'Invalid or expired reset link. Please request a new one.', 400);
+    }
+
+    const { user_id } = rows[0];
+    const password_hash = await bcrypt.hash(new_password, 12);
+
+    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash, user_id]);
+    await pool.query('DELETE FROM password_reset_tokens WHERE user_id = ?', [user_id]);
+
+    return successResponse(res, {}, 'Password reset successfully. You can now login.');
+  } catch (error) {
+    console.error('Reset password error:', error.message);
+    return errorResponse(res, 'Failed to reset password.');
+  }
+};
+
+const bulkRegister = async (req, res) => {
+  const { users, role } = req.body;
+ 
+  if (!users || !Array.isArray(users) || users.length === 0) {
+    return errorResponse(res, 'Users array is required.', 400);
+  }
+ 
+  if (!['student', 'instructor'].includes(role)) {
+    return errorResponse(res, 'Role must be student or instructor.', 400);
+  }
+ 
+  const results = { success: [], failed: [] };
+ 
+  for (const u of users) {
+    try {
+      const { full_name, email, password, student_number } = u;
+ 
+      if (!full_name || !email || !password) {
+        results.failed.push({ email: email || '?', reason: 'Missing required fields.' });
+        continue;
+      }
+ 
+      if (role === 'student' && !student_number) {
+        results.failed.push({ email, reason: 'Student number is required for students.' });
+        continue;
+      }
+ 
+      const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+      if (existing.length > 0) {
+        results.failed.push({ email, reason: 'Email already in use.' });
+        continue;
+      }
+ 
+      const password_hash = await bcrypt.hash(password, 12);
+      const uuid = generateUUID();
+ 
+      await pool.query(
+        'INSERT INTO users (uuid, full_name, email, password_hash, role, student_number) VALUES (?, ?, ?, ?, ?, ?)',
+        [uuid, full_name, email, password_hash, role, student_number || null]
+      );
+ 
+      results.success.push({ email, full_name });
+    } catch (err) {
+      results.failed.push({ email: u.email || '?', reason: 'Database error.' });
+    }
+  }
+ 
+  return successResponse(res, {
+    total: users.length,
+    success_count: results.success.length,
+    failed_count: results.failed.length,
+    failed: results.failed
+  }, `${results.success.length} users registered successfully.`);
+};
+
+module.exports = {
+  register,
+  login,
+  getMe,
+  searchStudents,
+  completeGoogleRegistration,
+  changePassword,
+  forgotPassword,
+  resetPassword,
+  bulkRegister
+};
