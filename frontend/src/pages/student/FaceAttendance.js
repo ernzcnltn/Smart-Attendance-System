@@ -159,6 +159,8 @@ const FaceAttendance = () => {
   };
 
   const handleVerify = async (secondImage, livenessFrames) => {
+     console.log('c1 image:', challenge1ImageRef.current ? 'OK' : 'NULL');
+  console.log('c2 image:', secondImage ? 'OK' : 'NULL');
     setLoading(true); setError('');
     try {
       const response = await api.post('/face/verify', {
