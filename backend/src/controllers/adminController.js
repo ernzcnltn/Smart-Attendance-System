@@ -1,3 +1,4 @@
+const axios = require('axios');
 const pool = require('../config/db');
 const { successResponse, errorResponse } = require('../utils/helpers');
 
@@ -55,9 +56,16 @@ const toggleUserStatus = async (req, res) => {
 const deleteUser = async (req, res) => {
   const { uuid } = req.params;
   try {
-    const [user] = await pool.query('SELECT id FROM users WHERE uuid = ?', [uuid]);
+    const [user] = await pool.query('SELECT id, uuid FROM users WHERE uuid = ?', [uuid]);
     if (user.length === 0) return errorResponse(res, 'User not found.', 404);
-
+    
+    // Yüz kaydını sil
+    try {
+      await axios.post(`${process.env.FACE_SERVICE_URL}/delete`, { student_uuid: uuid });
+    } catch (faceErr) {
+      console.error('Face delete error:', faceErr.message);
+    }
+    
     await pool.query('DELETE FROM users WHERE uuid = ?', [uuid]);
     return successResponse(res, {}, 'User deleted successfully.');
   } catch (error) {
