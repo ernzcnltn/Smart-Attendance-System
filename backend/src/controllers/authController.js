@@ -327,6 +327,8 @@ const bulkRegister = async (req, res) => {
   }, `${results.success.length} users registered successfully.`);
 };
 
+
+
 module.exports = {
   register,
   login,
@@ -336,5 +338,6 @@ module.exports = {
   changePassword,
   forgotPassword,
   resetPassword,
-  bulkRegister
+  bulkRegister,
+ 
 };

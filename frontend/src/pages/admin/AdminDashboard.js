@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Container, Row, Col, Card, Table, Button, Badge, Spinner, Alert, Tabs, Tab, Modal, Form } from 'react-bootstrap';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import * as XLSX from 'xlsx';
 import {
@@ -17,6 +18,7 @@ const COURSES_PER_PAGE = 10;
 const AdminDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [courses, setCourses] = useState([]);
@@ -32,7 +34,6 @@ const AdminDashboard = () => {
   const [userPage, setUserPage] = useState(1);
   const [coursePage, setCoursePage] = useState(1);
 
-  // Import modals
   const [showImportStudents, setShowImportStudents] = useState(false);
   const [showImportInstructors, setShowImportInstructors] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -80,7 +81,7 @@ const AdminDashboard = () => {
   };
 
   const handleDeleteUser = (uuid) => {
-    showConfirm('Delete User', 'Are you sure you want to delete this user? This action cannot be undone.', async () => {
+    showConfirm(t('admin.dashboard.confirmTitle'), t('admin.dashboard.deleteUserMsg'), async () => {
       try {
         await deleteUser(uuid);
         setSuccess('User deleted successfully.');
@@ -98,20 +99,19 @@ const AdminDashboard = () => {
   };
 
   const handleResetFace = (uuid) => {
-    showConfirm('Reset Face Data', 'Are you sure you want to reset face data for this student?', async () => {
+    showConfirm(t('admin.dashboard.resetFaceTitle'), t('admin.dashboard.resetFaceMsg'), async () => {
       try { await resetStudentFace(uuid); setSuccess('Face data reset successfully.'); }
       catch { setError('Failed to reset face data.'); }
     });
   };
 
   const handleResetAllFaces = () => {
-    showConfirm('Reset All Face Data', 'Are you sure you want to reset ALL student face data? This cannot be undone.', async () => {
+    showConfirm(t('admin.dashboard.resetAllFacesTitle'), t('admin.dashboard.resetAllMsg'), async () => {
       try { const res = await resetAllFaces(); setSuccess(res.message); }
       catch { setError('Failed to reset all faces.'); }
     });
   };
 
-  // ─── Excel Templates ───
   const downloadStudentTemplate = () => {
     const data = [
       { full_name: 'Eren Altın', email: 'eren@final.edu.tr', password: 'Pass123', student_number: '2003060001' },
@@ -134,40 +134,25 @@ const AdminDashboard = () => {
     XLSX.writeFile(wb, 'instructor_import_template.xlsx');
   };
 
-  // ─── Excel Import ───
   const handleImport = async (role) => {
     const ref = role === 'student' ? studentImportRef : instructorImportRef;
     const file = ref.current?.files[0];
     if (!file) return setError('Please select a file.');
-
     setImportLoading(true);
     setImportResult(null);
-
     try {
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws);
-
-      if (rows.length === 0) {
-        setError('Excel file is empty.');
-        setImportLoading(false);
-        return;
-      }
-
+      if (rows.length === 0) { setError('Excel file is empty.'); setImportLoading(false); return; }
       const response = await api.post('/auth/bulk-register', { users: rows, role });
       const result = response.data.data;
       setImportResult(result);
-
-      if (result.success_count > 0) {
-        const u = await getAllUsers();
-        setUsers(u);
-      }
+      if (result.success_count > 0) { const u = await getAllUsers(); setUsers(u); }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to import users.');
-    } finally {
-      setImportLoading(false);
-    }
+    } finally { setImportLoading(false); }
   };
 
   const closeImportModal = (role) => {
@@ -178,7 +163,7 @@ const AdminDashboard = () => {
 
   const roleBadge = (role) => {
     const colors = { admin: 'danger', instructor: 'primary', student: 'secondary' };
-    return <Badge bg={colors[role]}>{role}</Badge>;
+    return <Badge bg={colors[role]}>{t(`admin.roles.${role}`)}</Badge>;
   };
 
   const filteredUsers = users.filter(u =>
@@ -203,7 +188,7 @@ const AdminDashboard = () => {
     return (
       <div className="d-flex justify-content-between align-items-center mt-3 px-3 pb-3">
         <small className="text-muted">
-          Showing {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, totalItems)} of {totalItems}
+          {t('common.showing', { from: (currentPage - 1) * perPage + 1, to: Math.min(currentPage * perPage, totalItems), total: totalItems })}
         </small>
         <div className="d-flex gap-1 flex-wrap">
           <Button size="sm" variant="outline-secondary" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>&larr;</Button>
@@ -216,31 +201,29 @@ const AdminDashboard = () => {
     );
   };
 
-  // ─── Import Modal ───
   const ImportModal = ({ show, onClose, role, fileRef, onImport }) => (
     <Modal show={show} onHide={onClose} centered>
       <Modal.Header closeButton>
-        <Modal.Title>Import {role === 'student' ? 'Students' : 'Instructors'}</Modal.Title>
+        <Modal.Title>{role === 'student' ? t('admin.dashboard.importStudents') : t('admin.dashboard.importInstructors')}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <Alert variant="info" className="small">
-          Excel file must contain: <strong>full_name</strong>, <strong>email</strong>, <strong>password</strong>
-          {role === 'student' && <>, <strong>student_number</strong></>} columns.
+          {t('admin.dashboard.importExcelInfo')} <strong>full_name</strong>, <strong>email</strong>, <strong>password</strong>
+          {role === 'student' && <span>, <strong>student_number</strong></span>}
         </Alert>
         <Button variant="outline-secondary" size="sm" className="mb-3 d-flex align-items-center gap-1"
           onClick={role === 'student' ? downloadStudentTemplate : downloadInstructorTemplate}>
-          <Download size={14} /> Download Template
+          <Download size={14} /> {t('common.download')}
         </Button>
         <Form.Group>
-          <Form.Label>Select Excel File (.xlsx)</Form.Label>
+          <Form.Label>{t('common.selectExcelFile')}</Form.Label>
           <Form.Control type="file" accept=".xlsx,.xls" ref={fileRef} />
         </Form.Group>
-
         {importResult && (
           <div className="mt-3">
             <Alert variant={importResult.failed_count > 0 ? 'warning' : 'success'} className="small mb-2">
-              ✓ <strong>{importResult.success_count}</strong> imported successfully.
-              {importResult.failed_count > 0 && <> ✗ <strong>{importResult.failed_count}</strong> failed.</>}
+              ✓ <strong>{importResult.success_count}</strong> {t('admin.dashboard.importedSuccess')}
+              {importResult.failed_count > 0 && <> ✗ <strong>{importResult.failed_count}</strong> {t('admin.dashboard.importedFailed')}</>}
             </Alert>
             {importResult.failed?.length > 0 && (
               <div style={{ maxHeight: '160px', overflowY: 'auto', fontSize: '12px' }}>
@@ -253,9 +236,9 @@ const AdminDashboard = () => {
         )}
       </Modal.Body>
       <Modal.Footer>
-        <Button variant="secondary" onClick={onClose}>Close</Button>
+        <Button variant="secondary" onClick={onClose}>{t('common.close')}</Button>
         <Button variant="danger" onClick={() => onImport(role)} disabled={importLoading}>
-          {importLoading ? <><Spinner size="sm" className="me-1" />Importing...</> : 'Import'}
+          {importLoading ? <><Spinner size="sm" className="me-1" />{t('common.importing')}</> : t('common.upload')}
         </Button>
       </Modal.Footer>
     </Modal>
@@ -265,18 +248,18 @@ const AdminDashboard = () => {
 
   return (
     <Container>
-      <h4 className="mb-4">Admin Dashboard — {user?.full_name}</h4>
+      <h4 className="mb-4">{t('admin.dashboard.title')} — {user?.full_name}</h4>
 
       {error && <Alert variant="danger" dismissible onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert variant="success" dismissible onClose={() => setSuccess('')}>{success}</Alert>}
 
       <Row className="mb-4">
         {[
-          { label: 'Students', value: stats?.students },
-          { label: 'Instructors', value: stats?.instructors },
-          { label: 'Courses', value: stats?.courses },
-          { label: 'Sessions', value: stats?.sessions },
-          { label: 'Attendances', value: stats?.attendances }
+          { label: t('admin.dashboard.students'), value: stats?.students },
+          { label: t('admin.dashboard.instructors'), value: stats?.instructors },
+          { label: t('admin.dashboard.courses'), value: stats?.courses },
+          { label: t('admin.dashboard.sessions'), value: stats?.sessions },
+          { label: t('admin.dashboard.attendances'), value: stats?.attendances }
         ].map((s, i) => (
           <Col key={i} md={2} sm={4} xs={6} className="mb-3">
             <Card className="text-center shadow-sm border-primary">
@@ -290,23 +273,22 @@ const AdminDashboard = () => {
       </Row>
 
       <div className="d-flex flex-wrap gap-2 mb-4">
-        <Button variant="danger" onClick={() => setShowAddUser(true)}>+ Add User</Button>
-        <Button variant="danger" onClick={() => setShowImportStudents(true)}>Import Students</Button>
-        <Button variant="danger" onClick={() => setShowImportInstructors(true)}>Import Instructors</Button>
-        <Button variant="danger" onClick={() => navigate('/admin/timetable')}>Upload Timetable</Button>
-        <Button variant="danger" onClick={() => navigate('/admin/settings')}>System Settings</Button>
-        <Button variant="secondary" onClick={handleResetAllFaces}>Reset All Faces</Button>
+        <Button variant="danger" onClick={() => setShowAddUser(true)}>{t('admin.dashboard.addUser')}</Button>
+        <Button variant="danger" onClick={() => setShowImportStudents(true)}>{t('admin.dashboard.importStudents')}</Button>
+        <Button variant="danger" onClick={() => setShowImportInstructors(true)}>{t('admin.dashboard.importInstructors')}</Button>
+        <Button variant="danger" onClick={() => navigate('/admin/timetable')}>{t('admin.dashboard.uploadTimetable')}</Button>
+        <Button variant="secondary" onClick={handleResetAllFaces}>{t('admin.dashboard.resetAllFaces')}</Button>
       </div>
 
       <Tabs defaultActiveKey="users" className="mb-4">
 
         {/* ─── Users Tab ─── */}
-        <Tab eventKey="users" title="Users">
+        <Tab eventKey="users" title={t('admin.dashboard.users')}>
           <Card className="shadow-sm" style={{ borderRadius: '14px', overflow: 'hidden' }}>
             <Card.Body className="pb-2">
               <Form.Control
                 className="mb-3"
-                placeholder="Search by name, email or student number..."
+                placeholder={t('admin.dashboard.searchUsers')}
                 value={userSearch}
                 onChange={e => { setUserSearch(e.target.value); setUserPage(1); }}
               />
@@ -314,27 +296,35 @@ const AdminDashboard = () => {
               <div className="d-none d-md-block">
                 <Table hover className="mb-0">
                   <thead className="table-dark">
-                    <tr><th>Name</th><th>Email</th><th>Role</th><th>Student No</th><th>Status</th><th>Joined</th><th>Actions</th></tr>
+                    <tr>
+                      <th>{t('admin.dashboard.name')}</th>
+                      <th>{t('admin.dashboard.email')}</th>
+                      <th>{t('admin.dashboard.role')}</th>
+                      <th>{t('admin.dashboard.studentNo')}</th>
+                      <th>{t('common.status')}</th>
+                      <th>{t('admin.dashboard.joined')}</th>
+                      <th>{t('common.actions')}</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {paginatedUsers.length === 0 ? (
-                      <tr><td colSpan={7} className="text-center text-muted py-3">No users found.</td></tr>
+                      <tr><td colSpan={7} className="text-center text-muted py-3">{t('admin.dashboard.noUsers')}</td></tr>
                     ) : paginatedUsers.map(u => (
                       <tr key={u.uuid}>
                         <td>{u.full_name}</td>
                         <td>{u.email}</td>
                         <td>{roleBadge(u.role)}</td>
                         <td>{u.student_number || '—'}</td>
-                        <td><Badge bg={u.is_active ? 'success' : 'secondary'}>{u.is_active ? 'Active' : 'Inactive'}</Badge></td>
+                        <td><Badge bg={u.is_active ? 'success' : 'secondary'}>{u.is_active ? t('common.active') : t('common.inactive')}</Badge></td>
                         <td>{formatDate(u.created_at)}</td>
                         <td>
                           <div className="d-flex flex-wrap gap-1">
                             <Button size="sm" variant={u.is_active ? 'danger' : 'success'} onClick={() => handleToggleUser(u.uuid)}>
-                              {u.is_active ? 'Deactivate' : 'Activate'}
+                              {u.is_active ? t('admin.dashboard.deactivate') : t('admin.dashboard.activate')}
                             </Button>
-                            <Button size="sm" variant="danger" onClick={() => handleDeleteUser(u.uuid)}>Delete</Button>
+                            <Button size="sm" variant="danger" onClick={() => handleDeleteUser(u.uuid)}>{t('admin.dashboard.delete')}</Button>
                             {u.role === 'student' && (
-                              <Button size="sm" variant="secondary" onClick={() => handleResetFace(u.uuid)}>Reset Face</Button>
+                              <Button size="sm" variant="secondary" onClick={() => handleResetFace(u.uuid)}>{t('admin.dashboard.resetFace')}</Button>
                             )}
                           </div>
                         </td>
@@ -346,7 +336,7 @@ const AdminDashboard = () => {
               {/* Mobile Card List */}
               <div className="d-md-none">
                 {paginatedUsers.length === 0 ? (
-                  <p className="text-center text-muted py-3">No users found.</p>
+                  <p className="text-center text-muted py-3">{t('admin.dashboard.noUsers')}</p>
                 ) : paginatedUsers.map(u => (
                   <Card key={u.uuid} className="shadow-sm border-0 mb-3" style={{ borderRadius: '10px' }}>
                     <Card.Body className="p-3">
@@ -357,27 +347,27 @@ const AdminDashboard = () => {
                         </div>
                         <div className="d-flex gap-1 flex-wrap">
                           {roleBadge(u.role)}
-                          <Badge bg={u.is_active ? 'success' : 'secondary'}>{u.is_active ? 'Active' : 'Inactive'}</Badge>
+                          <Badge bg={u.is_active ? 'success' : 'secondary'}>{u.is_active ? t('common.active') : t('common.inactive')}</Badge>
                         </div>
                       </div>
                       <hr className="my-2" />
                       <div style={{ fontSize: '0.82rem' }} className="mb-2">
                         <div className="d-flex justify-content-between mb-1">
-                          <span className="text-muted">Student No</span>
+                          <span className="text-muted">{t('admin.dashboard.studentNo')}</span>
                           <span>{u.student_number || '—'}</span>
                         </div>
                         <div className="d-flex justify-content-between">
-                          <span className="text-muted">Joined</span>
+                          <span className="text-muted">{t('admin.dashboard.joined')}</span>
                           <span>{formatDate(u.created_at)}</span>
                         </div>
                       </div>
                       <div className="d-flex flex-wrap gap-1">
                         <Button size="sm" variant={u.is_active ? 'danger' : 'success'} onClick={() => handleToggleUser(u.uuid)}>
-                          {u.is_active ? 'Deactivate' : 'Activate'}
+                          {u.is_active ? t('admin.dashboard.deactivate') : t('admin.dashboard.activate')}
                         </Button>
-                        <Button size="sm" variant="danger" onClick={() => handleDeleteUser(u.uuid)}>Delete</Button>
+                        <Button size="sm" variant="danger" onClick={() => handleDeleteUser(u.uuid)}>{t('admin.dashboard.delete')}</Button>
                         {u.role === 'student' && (
-                          <Button size="sm" variant="secondary" onClick={() => handleResetFace(u.uuid)}>Reset Face</Button>
+                          <Button size="sm" variant="secondary" onClick={() => handleResetFace(u.uuid)}>{t('admin.dashboard.resetFace')}</Button>
                         )}
                       </div>
                     </Card.Body>
@@ -390,12 +380,12 @@ const AdminDashboard = () => {
         </Tab>
 
         {/* ─── Courses Tab ─── */}
-        <Tab eventKey="courses" title="Courses">
+        <Tab eventKey="courses" title={t('admin.dashboard.courses')}>
           <Card className="shadow-sm" style={{ borderRadius: '14px', overflow: 'hidden' }}>
             <Card.Body className="pb-2">
               <Form.Control
                 className="mb-3"
-                placeholder="Search by course code, name or instructor..."
+                placeholder={t('admin.dashboard.searchCourses')}
                 value={courseSearch}
                 onChange={e => { setCourseSearch(e.target.value); setCoursePage(1); }}
               />
@@ -403,11 +393,20 @@ const AdminDashboard = () => {
               <div className="d-none d-md-block">
                 <Table hover className="mb-0">
                   <thead className="table-dark">
-                    <tr><th>Code</th><th>Course Name</th><th>Instructor</th><th>Semester</th><th>Students</th><th>Threshold</th><th>Status</th><th>Actions</th></tr>
+                    <tr>
+                      <th>{t('admin.dashboard.code')}</th>
+                      <th>{t('admin.dashboard.courseName')}</th>
+                      <th>{t('admin.dashboard.instructor')}</th>
+                      <th>{t('admin.dashboard.semester')}</th>
+                      <th>{t('admin.dashboard.studentCount')}</th>
+                      <th>{t('admin.dashboard.threshold')}</th>
+                      <th>{t('common.status')}</th>
+                      <th>{t('common.actions')}</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {paginatedCourses.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center text-muted py-3">No courses found.</td></tr>
+                      <tr><td colSpan={8} className="text-center text-muted py-3">{t('admin.dashboard.noCourses')}</td></tr>
                     ) : paginatedCourses.map(c => (
                       <tr key={c.uuid}>
                         <td><strong>{c.course_code}</strong></td>
@@ -416,10 +415,10 @@ const AdminDashboard = () => {
                         <td>{c.semester}</td>
                         <td>{c.student_count}</td>
                         <td>{c.attendance_threshold}%</td>
-                        <td><Badge bg={c.is_active ? 'success' : 'secondary'}>{c.is_active ? 'Active' : 'Inactive'}</Badge></td>
+                        <td><Badge bg={c.is_active ? 'success' : 'secondary'}>{c.is_active ? t('common.active') : t('common.inactive')}</Badge></td>
                         <td>
                           <Button size="sm" variant={c.is_active ? 'danger' : 'success'} onClick={() => handleToggleCourse(c.uuid)}>
-                            {c.is_active ? 'Deactivate' : 'Activate'}
+                            {c.is_active ? t('admin.dashboard.deactivate') : t('admin.dashboard.activate')}
                           </Button>
                         </td>
                       </tr>
@@ -430,7 +429,7 @@ const AdminDashboard = () => {
               {/* Mobile Card List */}
               <div className="d-md-none">
                 {paginatedCourses.length === 0 ? (
-                  <p className="text-center text-muted py-3">No courses found.</p>
+                  <p className="text-center text-muted py-3">{t('admin.dashboard.noCourses')}</p>
                 ) : paginatedCourses.map(c => (
                   <Card key={c.uuid} className="shadow-sm border-0 mb-3" style={{ borderRadius: '10px' }}>
                     <Card.Body className="p-3">
@@ -439,17 +438,17 @@ const AdminDashboard = () => {
                           <strong>{c.course_code}</strong>
                           <div className="text-muted small">{c.course_name}</div>
                         </div>
-                        <Badge bg={c.is_active ? 'success' : 'secondary'}>{c.is_active ? 'Active' : 'Inactive'}</Badge>
+                        <Badge bg={c.is_active ? 'success' : 'secondary'}>{c.is_active ? t('common.active') : t('common.inactive')}</Badge>
                       </div>
                       <hr className="my-2" />
                       <div style={{ fontSize: '0.82rem' }} className="mb-2">
-                        <div className="d-flex justify-content-between mb-1"><span className="text-muted">Instructor</span><span>{c.instructor_name}</span></div>
-                        <div className="d-flex justify-content-between mb-1"><span className="text-muted">Semester</span><span>{c.semester}</span></div>
-                        <div className="d-flex justify-content-between mb-1"><span className="text-muted">Students</span><span>{c.student_count}</span></div>
-                        <div className="d-flex justify-content-between"><span className="text-muted">Threshold</span><span>{c.attendance_threshold}%</span></div>
+                        <div className="d-flex justify-content-between mb-1"><span className="text-muted">{t('admin.dashboard.instructor')}</span><span>{c.instructor_name}</span></div>
+                        <div className="d-flex justify-content-between mb-1"><span className="text-muted">{t('admin.dashboard.semester')}</span><span>{c.semester}</span></div>
+                        <div className="d-flex justify-content-between mb-1"><span className="text-muted">{t('admin.dashboard.studentCount')}</span><span>{c.student_count}</span></div>
+                        <div className="d-flex justify-content-between"><span className="text-muted">{t('admin.dashboard.threshold')}</span><span>{c.attendance_threshold}%</span></div>
                       </div>
                       <Button size="sm" variant={c.is_active ? 'danger' : 'success'} className="w-100" onClick={() => handleToggleCourse(c.uuid)}>
-                        {c.is_active ? 'Deactivate' : 'Activate'}
+                        {c.is_active ? t('admin.dashboard.deactivate') : t('admin.dashboard.activate')}
                       </Button>
                     </Card.Body>
                   </Card>
@@ -463,67 +462,52 @@ const AdminDashboard = () => {
 
       {/* Add User Modal */}
       <Modal show={showAddUser} onHide={() => setShowAddUser(false)}>
-        <Modal.Header closeButton><Modal.Title>Add New User</Modal.Title></Modal.Header>
+        <Modal.Header closeButton><Modal.Title>{t('admin.dashboard.addUserTitle')}</Modal.Title></Modal.Header>
         <Modal.Body>
           <Form onSubmit={handleAddUser}>
             <Form.Group className="mb-3">
-              <Form.Label>Full Name</Form.Label>
+              <Form.Label>{t('admin.dashboard.fullName')}</Form.Label>
               <Form.Control value={addUserForm.full_name} onChange={e => setAddUserForm({ ...addUserForm, full_name: e.target.value })} required />
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Email</Form.Label>
+              <Form.Label>{t('admin.dashboard.email')}</Form.Label>
               <Form.Control type="email" value={addUserForm.email} onChange={e => setAddUserForm({ ...addUserForm, email: e.target.value })} required />
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Password</Form.Label>
+              <Form.Label>{t('admin.dashboard.password')}</Form.Label>
               <Form.Control type="password" value={addUserForm.password} onChange={e => setAddUserForm({ ...addUserForm, password: e.target.value })} required />
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Role</Form.Label>
+              <Form.Label>{t('admin.dashboard.roleLabel')}</Form.Label>
               <Form.Select value={addUserForm.role} onChange={e => setAddUserForm({ ...addUserForm, role: e.target.value })}>
-                <option value="student">Student</option>
-                <option value="instructor">Instructor</option>
-                <option value="admin">Admin</option>
+                <option value="student">{t('admin.roles.student')}</option>
+                <option value="instructor">{t('admin.roles.instructor')}</option>
+                <option value="admin">{t('admin.roles.admin')}</option>
               </Form.Select>
             </Form.Group>
             {addUserForm.role === 'student' && (
               <Form.Group className="mb-3">
-                <Form.Label>Student Number</Form.Label>
+                <Form.Label>{t('admin.dashboard.studentNumber')}</Form.Label>
                 <Form.Control value={addUserForm.student_number} onChange={e => setAddUserForm({ ...addUserForm, student_number: e.target.value })} required />
               </Form.Group>
             )}
             <Button type="submit" variant="danger" className="w-100" disabled={addingUser}>
-              {addingUser ? <Spinner size="sm" /> : 'Add User'}
+              {addingUser ? <Spinner size="sm" /> : t('admin.dashboard.addUserBtn')}
             </Button>
           </Form>
         </Modal.Body>
       </Modal>
 
-      {/* Import Students Modal */}
-      <ImportModal
-        show={showImportStudents}
-        onClose={() => closeImportModal('student')}
-        role="student"
-        fileRef={studentImportRef}
-        onImport={handleImport}
-      />
-
-      {/* Import Instructors Modal */}
-      <ImportModal
-        show={showImportInstructors}
-        onClose={() => closeImportModal('instructor')}
-        role="instructor"
-        fileRef={instructorImportRef}
-        onImport={handleImport}
-      />
+      <ImportModal show={showImportStudents} onClose={() => closeImportModal('student')} role="student" fileRef={studentImportRef} onImport={handleImport} />
+      <ImportModal show={showImportInstructors} onClose={() => closeImportModal('instructor')} role="instructor" fileRef={instructorImportRef} onImport={handleImport} />
 
       {/* Confirm Modal */}
       <Modal show={confirmModal.show} onHide={() => setConfirmModal({ ...confirmModal, show: false })} centered>
         <Modal.Header closeButton><Modal.Title>{confirmModal.title}</Modal.Title></Modal.Header>
         <Modal.Body><p>{confirmModal.message}</p></Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setConfirmModal({ ...confirmModal, show: false })}>Cancel</Button>
-          <Button variant="danger" onClick={handleConfirm}>Confirm</Button>
+          <Button variant="secondary" onClick={() => setConfirmModal({ ...confirmModal, show: false })}>{t('common.cancel')}</Button>
+          <Button variant="danger" onClick={handleConfirm}>{t('common.confirm')}</Button>
         </Modal.Footer>
       </Modal>
     </Container>

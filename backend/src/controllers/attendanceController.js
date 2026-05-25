@@ -106,8 +106,10 @@ const sendLowAttendanceNotifications = async (req, res) => {
     );
 
     const total = totalSessions[0].total;
+
+    // Hiç session yoksa bildirim gönderme
     if (total === 0) {
-      return errorResponse(res, 'No sessions found for this course.', 400);
+      return successResponse(res, { notified: 0 }, 'No sessions have been held yet. Notifications not sent.');
     }
 
     const [students] = await pool.query(`
@@ -128,10 +130,17 @@ const sendLowAttendanceNotifications = async (req, res) => {
       return successResponse(res, { notified: 0 }, 'No students below threshold.');
     }
 
-    const notifications = students.map(s => [
-      s.id,
-      `Your attendance in ${course[0].course_name} is ${s.percentage}%, which is below the required ${threshold}%. Please attend classes regularly.`
-    ]);
+    const notifications = students.map(s => {
+      // Kaç derse daha katılması gerekiyor
+      const requiredAttended = Math.ceil((threshold / 100) * total);
+      const remaining = Math.max(0, requiredAttended - s.attended);
+
+      const message = remaining > 0
+        ? `Your attendance in ${course[0].course_name} is ${s.percentage}%, which is below the required ${threshold}%. You need to attend ${remaining} more class(es) to meet the requirement.`
+        : `Your attendance in ${course[0].course_name} is ${s.percentage}%, which is below the required ${threshold}%. Please attend classes regularly.`;
+
+      return [s.id, message];
+    });
 
     await pool.query(
       'INSERT INTO notifications (user_id, message) VALUES ?',
@@ -210,18 +219,15 @@ const getMySessionHistory = async (req, res) => {
       return errorResponse(res, 'Course not found or not enrolled.', 404);
     }
 
-    const courseId = course[0].id;
-
     const [sessions] = await pool.query(`
       SELECT
-        cs.id,
-        cs.session_date,
+        cs.id, cs.session_date,
         CASE WHEN ar.id IS NOT NULL THEN 1 ELSE 0 END as attended
       FROM class_sessions cs
       LEFT JOIN attendance_records ar ON ar.session_id = cs.id AND ar.student_id = ?
       WHERE cs.course_id = ?
       ORDER BY cs.session_date ASC
-    `, [req.user.id, courseId]);
+    `, [req.user.id, course[0].id]);
 
     return successResponse(res, sessions);
   } catch (error) {

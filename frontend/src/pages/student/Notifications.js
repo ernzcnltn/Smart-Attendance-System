@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Container, Card, Button, Badge, Alert, Spinner, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { getMyNotifications, markNotificationRead, deleteNotification } from '../../services/attendanceService';
 
 const Notifications = () => {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const localeMap = { tr: 'tr-TR', fr: 'fr-FR', ar: 'ar-SA', ru: 'ru-RU', en: 'en-GB' };
+  const locale = localeMap[i18n.language] || 'en-GB';
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -32,14 +36,11 @@ const Notifications = () => {
     } catch (err) {}
   };
 
- const handleMarkAllRead = async () => {
+  const handleMarkAllRead = async () => {
     const unread = notifications.filter(n => !n.is_read);
-    
     if (unread.length === 0) return;
-
     try {
       await Promise.all(unread.map(n => markNotificationRead(n.id)));
-      
       setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
     } catch (err) {
       setError('Failed to mark all as read.');
@@ -65,11 +66,11 @@ const Notifications = () => {
   return (
     <Container>
       <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => navigate('/student')}>
-        ← Back
+        ← {t('common.back')}
       </Button>
 
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h4>Notifications</h4>
+        <h4>{t('notifications.title')}</h4>
         <div className="d-flex gap-2">
           {notifications.filter(n => !n.is_read).length > 0 && (
             <Button variant="outline-primary" size="sm" onClick={handleMarkAllRead}>
@@ -89,7 +90,7 @@ const Notifications = () => {
       {notifications.length === 0 ? (
         <Card className="shadow-sm">
           <Card.Body className="text-center text-muted py-5">
-            No notifications yet.
+            {t('notifications.noNotifications')}
           </Card.Body>
         </Card>
       ) : (
@@ -100,19 +101,19 @@ const Notifications = () => {
                 <div className="flex-grow-1">
                   <p className="mb-1">{n.message}</p>
                   <span className="text-muted small">
-                    {new Date(n.created_at).toLocaleString('en-GB')}
+                    {new Date(n.created_at).toLocaleString(locale)}
                   </span>
                 </div>
                 <div className="ms-3 d-flex align-items-center gap-2">
                   {!n.is_read ? (
                     <>
-                      <Badge bg="danger" text="light">New</Badge>
+                      <Badge bg="danger" text="light">{t('notifications.new')}</Badge>
                       <Button
                         variant="outline-secondary"
                         size="sm"
                         onClick={() => handleMarkRead(n.id)}
                       >
-                        Mark as read
+                        {t('notifications.markRead')}
                       </Button>
                     </>
                   ) : (
@@ -123,7 +124,7 @@ const Notifications = () => {
                     size="sm"
                     onClick={() => handleDelete(n.id)}
                   >
-                    Delete
+                    {t('notifications.delete')}
                   </Button>
                 </div>
               </div>
@@ -140,8 +141,8 @@ const Notifications = () => {
           Are you sure you want to delete all notifications? This action cannot be undone.
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowConfirm(false)}>Cancel</Button>
-          <Button variant="danger" onClick={handleDeleteAll}>Delete All</Button>
+          <Button variant="secondary" onClick={() => setShowConfirm(false)}>{t('common.cancel')}</Button>
+          <Button variant="danger" onClick={handleDeleteAll}>{t('common.delete')}</Button>
         </Modal.Footer>
       </Modal>
     </Container>

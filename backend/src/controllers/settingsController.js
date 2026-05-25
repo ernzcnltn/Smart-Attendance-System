@@ -1,6 +1,23 @@
 const pool = require('../config/db');
 const { successResponse, errorResponse } = require('../utils/helpers');
 
+const PUBLIC_KEYS = ['school_logo', 'app_favicon', 'university_name'];
+
+const getPublicSettings = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (${PUBLIC_KEYS.map(() => '?').join(',')})`,
+      PUBLIC_KEYS
+    );
+    const settings = {};
+    rows.forEach(row => { settings[row.setting_key] = row.setting_value; });
+    return successResponse(res, settings);
+  } catch (error) {
+    console.error('Get public settings error:', error.message);
+    return errorResponse(res, 'Failed to fetch settings.');
+  }
+};
+
 const getSettings = async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM system_settings ORDER BY id ASC');
@@ -23,7 +40,9 @@ const updateSetting = async (req, res) => {
   const { key } = req.params;
   const { value } = req.body;
 
-  if (!value) return errorResponse(res, 'Value is required.', 400);
+  if (value === undefined || value === null) {
+    return errorResponse(res, 'Value is required.', 400);
+  }
 
   try {
     const [existing] = await pool.query('SELECT id FROM system_settings WHERE setting_key = ?', [key]);
@@ -42,4 +61,4 @@ const getSettingByKey = async (key) => {
   return rows.length > 0 ? rows[0].setting_value : null;
 };
 
-module.exports = { getSettings, updateSetting, getSettingByKey };
+module.exports = { getSettings, updateSetting, getSettingByKey, getPublicSettings };

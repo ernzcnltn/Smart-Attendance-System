@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Card, Button, Form, Alert, Spinner, Image, Modal, Badge } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
+import { getErrorMessage } from '../../utils/errorCodes';
 
 const GenerateQR = () => {
   const { uuid } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [duration, setDuration] = useState(15);
   const [qrData, setQrData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -15,7 +18,42 @@ const GenerateQR = () => {
   const [showModal, setShowModal] = useState(false);
   const [existingSession, setExistingSession] = useState(null);
 
+  const [isOnline, setIsOnline] = useState(false);
+  const [location, setLocation] = useState(null);
+  const [locationError, setLocationError] = useState('');
+  const [gettingLocation, setGettingLocation] = useState(false);
+
+  useEffect(() => {
+    if (!isOnline) getLocation();
+  }, [isOnline]);
+
+  const getLocation = () => {
+    setGettingLocation(true);
+    setLocationError('');
+    setLocation(null);
+    if (!navigator.geolocation) {
+      setLocationError(t('instructor.generateQR.locationDenied'));
+      setGettingLocation(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        setGettingLocation(false);
+      },
+      () => {
+        setLocationError(t('instructor.generateQR.locationDenied'));
+        setGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   const generateQR = async (useExisting = false, forceNew = false) => {
+    if (!isOnline && !location) {
+      setError('Location is required to start a session.');
+      return;
+    }
     setError('');
     setLoading(true);
     setShowModal(false);
@@ -23,7 +61,10 @@ const GenerateQR = () => {
       const response = await api.post(`/sessions/course/${uuid}/qr`, {
         duration_minutes: duration,
         use_existing: useExisting,
-        force_new: forceNew
+        force_new: forceNew,
+        is_online: isOnline,
+        latitude: isOnline ? null : location?.latitude,
+        longitude: isOnline ? null : location?.longitude
       });
 
       if (response.data.has_existing) {
@@ -49,7 +90,7 @@ const GenerateQR = () => {
       }, 1000);
       setTimerInterval(interval);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to generate QR code.');
+      setError(getErrorMessage(err, t));
     } finally {
       setLoading(false);
     }
@@ -79,30 +120,74 @@ const GenerateQR = () => {
   return (
     <Container>
       <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => navigate('/instructor')}>
-        ← Back
+        ← {t('common.back')}
       </Button>
       <Card className="shadow-sm mx-auto" style={{ maxWidth: '500px' }}>
-        <Card.Header><strong>Generate QR Code</strong></Card.Header>
+        <Card.Header><strong>{t('instructor.generateQR.title')}</strong></Card.Header>
         <Card.Body>
           {error && <Alert variant="danger">{error}</Alert>}
+
+          {/* Online Session Toggle */}
+          <Form.Group className="mb-3">
+            <Form.Check
+              type="switch"
+              id="online-switch"
+              label={t('instructor.generateQR.onlineSession')}
+              checked={isOnline}
+              onChange={e => setIsOnline(e.target.checked)}
+            />
+            <Form.Text className="text-muted">
+              {t('instructor.generateQR.onlineHelp')}
+            </Form.Text>
+          </Form.Group>
+
+          {/* Konum durumu — sadece offline session'da göster */}
+          {!isOnline && (
+            <>
+              {gettingLocation && (
+                <Alert variant="info" className="small">
+                  <Spinner size="sm" className="me-2" />
+                  {t('instructor.generateQR.gettingLocation')}
+                </Alert>
+              )}
+              {locationError && (
+                <Alert variant="danger" className="small">
+                  {locationError}
+                  <div><Button variant="link" size="sm" className="p-0 mt-1" onClick={getLocation}>{t('instructor.generateQR.tryAgain')}</Button></div>
+                </Alert>
+              )}
+              {location && !locationError && (
+                <Alert variant="success" className="small">
+                  ✓ {t('instructor.generateQR.locationCaptured')}
+                </Alert>
+              )}
+            </>
+          )}
+
+          {isOnline && (
+            <Alert variant="info" className="small">
+              {t('instructor.generateQR.onlineMode')}
+            </Alert>
+          )}
 
           {!qrData ? (
             <Form onSubmit={handleSubmit}>
               <Form.Group className="mb-3">
-                <Form.Label>QR Duration (minutes)</Form.Label>
+                <Form.Label>{t('instructor.generateQR.duration')}</Form.Label>
                 <Form.Control
-                  type="number"
-                  min="1"
-                  max="60"
+                  type="number" min="1" max="60"
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
                 />
-                <Form.Text className="text-muted">
-                  QR code will expire after this duration.
-                </Form.Text>
+                <Form.Text className="text-muted">{t('instructor.generateQR.durationHelp')}</Form.Text>
               </Form.Group>
-              <Button type="submit" variant="danger" className="w-100" disabled={loading}>
-                {loading ? <Spinner size="sm" /> : 'Start Session & Generate QR'}
+              <Button
+                type="submit"
+                variant="danger"
+                className="w-100"
+                disabled={loading || (!isOnline && (gettingLocation || !location))}
+              >
+                {loading ? <Spinner size="sm" /> : (!isOnline && !location) ? t('instructor.generateQR.waitingLocation') : t('instructor.generateQR.startSession')}
               </Button>
             </Form>
           ) : (
@@ -111,19 +196,12 @@ const GenerateQR = () => {
                 <Badge bg={timeLeft > 60 ? 'success' : 'danger'} className="fs-5 px-3 py-2">
                   {formatTime(timeLeft)}
                 </Badge>
-                <p className="text-muted mt-1 small">Time remaining</p>
+                <p className="text-muted mt-1 small">{t('instructor.generateQR.timeRemaining')}</p>
               </div>
               <Image src={qrData.qr_code} fluid className="border rounded p-2" style={{ maxWidth: '300px' }} />
-              <p className="text-muted mt-3 small">
-                Show this QR code to students. It will expire automatically.
-              </p>
-              <Button
-                variant="outline-danger"
-                size="sm"
-                className="mt-2"
-                onClick={handleCancelSession}
-              >
-                Cancel Session
+              <p className="text-muted mt-3 small">{t('instructor.generateQR.showQR')}</p>
+              <Button variant="outline-danger" size="sm" className="mt-2" onClick={handleCancelSession}>
+                {t('instructor.generateQR.cancelSession')}
               </Button>
             </div>
           )}
@@ -132,33 +210,23 @@ const GenerateQR = () => {
 
       <Modal show={showModal} onHide={() => setShowModal(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Active Session Exists</Modal.Title>
+          <Modal.Title>{t('instructor.generateQR.activeSessionExists')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p>An active session already exists for today:</p>
+          <p>{t('instructor.generateQR.activeSessionMsg')}</p>
           <div className="bg-light rounded p-3 mb-3">
-            <p className="mb-1"><strong>Date:</strong> {existingSession?.session_date}</p>
-            <p className="mb-0"><strong>Time:</strong> {existingSession?.start_time} - {existingSession?.end_time}</p>
+            <p className="mb-1"><strong>{t('common.date')}:</strong> {existingSession?.session_date}</p>
+            <p className="mb-0"><strong>{t('common.time')}:</strong> {existingSession?.start_time} - {existingSession?.end_time}</p>
           </div>
           <p className="text-muted small">
-            Would you like to generate a new QR for the existing session, or create a new session?
+            {t('instructor.generateQR.activeSessionNote')}
             <br />
-            <strong>Note:</strong> If you have multiple groups at different times, create a new session.
+            <strong>{t('common.note')}:</strong> {t('instructor.generateQR.activeSessionNoteWarning')}
           </p>
         </Modal.Body>
         <Modal.Footer>
-          <Button
-            variant="outline-secondary"
-            onClick={() => generateQR(false, true)}
-          >
-            Create New Session
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => generateQR(true, false)}
-          >
-            Use Existing Session
-          </Button>
+          <Button variant="outline-secondary" onClick={() => generateQR(false, true)}>{t('instructor.generateQR.createNew')}</Button>
+          <Button variant="primary" onClick={() => generateQR(true, false)}>{t('instructor.generateQR.useExisting')}</Button>
         </Modal.Footer>
       </Modal>
     </Container>

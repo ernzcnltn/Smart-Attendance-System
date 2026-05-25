@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Container, Row, Col, Card, Button, Spinner, Alert, Badge, Image, Modal, Form } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { getMyCourses, deleteCourse } from '../../services/courseService';
 import { getActiveSession, deleteSession } from '../../services/sessionService';
-import { PeopleFill, GridFill, PlayCircleFill, StopCircleFill, UpcScan, CloudUploadFill, Download, TrashFill } from 'react-bootstrap-icons';
+import { PeopleFill, GridFill, PlayCircleFill, StopCircleFill, UpcScan, Download, TrashFill } from 'react-bootstrap-icons';
 import api from '../../services/api';
 import * as XLSX from 'xlsx';
 
@@ -13,6 +14,7 @@ const ITEMS_PER_PAGE = 10;
 const InstructorDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [courses, setCourses] = useState([]);
   const [activeSessions, setActiveSessions] = useState({});
   const [loading, setLoading] = useState(true);
@@ -27,9 +29,7 @@ const InstructorDashboard = () => {
   const scheduleFileRef = useRef(null);
   const timerRef = useRef(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
@@ -50,9 +50,7 @@ const InstructorDashboard = () => {
     }
   };
 
-  const showConfirm = (title, message, onConfirm) => {
-    setConfirmModal({ show: true, title, message, onConfirm });
-  };
+  const showConfirm = (title, message, onConfirm) => setConfirmModal({ show: true, title, message, onConfirm });
 
   const handleConfirm = async () => {
     setConfirmModal({ ...confirmModal, show: false });
@@ -61,8 +59,8 @@ const InstructorDashboard = () => {
 
   const handleDeleteCourse = (course) => {
     showConfirm(
-      'Delete Course',
-      `Are you sure you want to delete "${course.course_code} — ${course.course_name}"? All student enrollments and attendance records will be permanently deleted.`,
+      t('instructor.dashboard.deleteCourseTitle'),
+      t('instructor.dashboard.deleteCourseMsg', { code: course.course_code, name: course.course_name }),
       async () => {
         try {
           await deleteCourse(course.uuid);
@@ -126,7 +124,7 @@ const InstructorDashboard = () => {
       const response = await api.post('/timetable/schedule', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setSuccess(`Schedule uploaded. ${response.data.data.created} entries created, ${response.data.data.coursesCreated} new courses created.`);
+      setSuccess(t('instructor.dashboard.scheduleUploaded', { created: response.data.data.created, coursesCreated: response.data.data.coursesCreated }));
       setShowScheduleModal(false);
       await fetchData();
     } catch (err) {
@@ -164,6 +162,9 @@ const InstructorDashboard = () => {
   const totalStudents = courses.reduce((acc, c) => acc + (c.student_count || 0), 0);
   const activeLiveCount = Object.keys(activeSessions).length;
 
+  const localeMap = { tr: 'tr-TR', fr: 'fr-FR', ar: 'ar-SA', ru: 'ru-RU', en: 'en-GB' };
+  const today = new Date().toLocaleDateString(localeMap[i18n.language] || 'en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
   if (loading) return <Container className="text-center mt-5"><Spinner animation="border" /></Container>;
 
   return (
@@ -174,17 +175,15 @@ const InstructorDashboard = () => {
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
         <div>
-          <h4 className="mb-0">Welcome, <strong>{user?.full_name}</strong></h4>
-          <p className="text-muted mt-1 mb-0 small">
-            {new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
+          <h4 className="mb-0">{t('instructor.dashboard.welcome')} <strong>{user?.full_name}</strong></h4>
+          <p className="text-muted mt-1 mb-0 small">{today}</p>
         </div>
         <div className="d-flex gap-2">
-      <Button variant="danger" onClick={() => setShowScheduleModal(true)} className="d-flex align-items-center gap-1">
-                Upload Schedule
+          <Button variant="danger" onClick={() => setShowScheduleModal(true)} className="d-flex align-items-center gap-1">
+            {t('instructor.dashboard.uploadSchedule')}
           </Button>
           <Button variant="danger" onClick={() => navigate('/instructor/courses/new')}>
-            New Course
+            {t('instructor.dashboard.newCourse')}
           </Button>
         </div>
       </div>
@@ -192,27 +191,27 @@ const InstructorDashboard = () => {
       {/* Stats */}
       <Row className="mb-4 g-3">
         <Col md={4}>
-          <Card className="shadow-sm border-0 h-100" style={{background: 'linear-gradient(135deg, #b71c1c, #c62828)' }}>
+          <Card className="shadow-sm border-0 h-100" style={{ background: 'linear-gradient(135deg, #b71c1c, #c62828)' }}>
             <Card.Body className="d-flex align-items-center gap-3 py-4">
               <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '14px' }}>
                 <GridFill size={28} color="white" />
               </div>
               <div>
                 <h2 className="mb-0 text-white">{courses.length}</h2>
-                <p className="mb-0 small" style={{ color: 'rgba(255,255,255,0.7)' }}>My Courses</p>
+                <p className="mb-0 small" style={{ color: 'rgba(255,255,255,0.7)' }}>{t('instructor.dashboard.myCourses')}</p>
               </div>
             </Card.Body>
           </Card>
         </Col>
         <Col md={4}>
-          <Card className="shadow-sm border-0 h-100" style={{background: 'linear-gradient(135deg, #d32f2f, #e53935)' }}>
+          <Card className="shadow-sm border-0 h-100" style={{ background: 'linear-gradient(135deg, #d32f2f, #e53935)' }}>
             <Card.Body className="d-flex align-items-center gap-3 py-4">
               <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '12px', padding: '14px' }}>
                 <PeopleFill size={28} color="white" />
               </div>
               <div>
                 <h2 className="mb-0 text-white">{totalStudents}</h2>
-                <p className="mb-0 small" style={{ color: 'rgba(255,255,255,0.7)' }}>Total Students</p>
+                <p className="mb-0 small" style={{ color: 'rgba(255,255,255,0.7)' }}>{t('instructor.dashboard.totalStudents')}</p>
               </div>
             </Card.Body>
           </Card>
@@ -225,7 +224,7 @@ const InstructorDashboard = () => {
               </div>
               <div>
                 <h2 className="mb-0 text-white">{activeLiveCount}</h2>
-                <p className="mb-0 small" style={{ color: 'rgba(255,255,255,0.7)' }}>Active Sessions</p>
+                <p className="mb-0 small" style={{ color: 'rgba(255,255,255,0.7)' }}>{t('instructor.dashboard.activeSessions')}</p>
               </div>
             </Card.Body>
           </Card>
@@ -236,10 +235,10 @@ const InstructorDashboard = () => {
       <Card className="shadow-sm border-0">
         <Card.Header className="border-bottom py-3">
           <div className="d-flex justify-content-between align-items-center">
-            <strong>My Courses</strong>
+            <strong>{t('instructor.dashboard.myCourses')}</strong>
             <Form.Control
               size="sm"
-              placeholder="Search courses..."
+              placeholder={t('instructor.dashboard.searchCourses')}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
               style={{ maxWidth: '200px' }}
@@ -249,7 +248,7 @@ const InstructorDashboard = () => {
         <Card.Body className="p-0">
           {paginatedCourses.length === 0 ? (
             <p className="text-muted p-3">
-              {search ? 'No courses found.' : 'No courses yet. Create your first course!'}
+              {search ? t('instructor.dashboard.noCoursesFound') : t('instructor.dashboard.noCourses')}
             </p>
           ) : (
             paginatedCourses.map((c, i) => {
@@ -270,18 +269,18 @@ const InstructorDashboard = () => {
                         {isLive && (
                           <Badge bg="danger" className="d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
                             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'white', display: 'inline-block' }}></span>
-                            LIVE
+                            {t('instructor.dashboard.live')}
                           </Badge>
                         )}
                       </div>
                       <div className="text-muted small mt-1">
-                        {c.semester} · Threshold: {c.attendance_threshold}% · {c.student_count || 0} students
+                        {c.semester} · {t('instructor.dashboard.threshold')}: {c.attendance_threshold}% · {c.student_count || 0} {t('instructor.dashboard.students')}
                       </div>
                     </div>
                   </div>
                   <div className="d-flex gap-2">
                     <Button size="sm" variant="secondary" className="flex-fill" onClick={() => navigate(`/instructor/courses/${c.uuid}`)}>
-                      Manage
+                      {t('instructor.dashboard.manage')}
                     </Button>
                     <Button
                       size="sm"
@@ -289,13 +288,11 @@ const InstructorDashboard = () => {
                       className="flex-fill d-flex align-items-center justify-content-center gap-1"
                       onClick={() => handleGenerateQR(c)}
                     >
-                      {isLive ? <><PlayCircleFill size={14} /> View QR</> : <><UpcScan size={14} /> Generate QR</>}
+                      {isLive
+                        ? <><PlayCircleFill size={14} /> {t('instructor.dashboard.viewQR')}</>
+                        : <><UpcScan size={14} /> {t('instructor.dashboard.generateQR')}</>}
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={(e) => { e.stopPropagation(); handleDeleteCourse(c); }}
-                    >
+                    <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); handleDeleteCourse(c); }}>
                       <TrashFill size={14} />
                     </Button>
                   </div>
@@ -307,19 +304,12 @@ const InstructorDashboard = () => {
         {totalPages > 1 && (
           <Card.Footer className="d-flex justify-content-between align-items-center py-2">
             <small className="text-muted">
-              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredCourses.length)} of {filteredCourses.length}
+              {t('common.showing', { from: (currentPage - 1) * ITEMS_PER_PAGE + 1, to: Math.min(currentPage * ITEMS_PER_PAGE, filteredCourses.length), total: filteredCourses.length })}
             </small>
             <div className="d-flex gap-1">
               <Button size="sm" variant="outline-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)}>←</Button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <Button
-                  key={page}
-                  size="sm"
-                  variant={currentPage === page ? 'danger' : 'outline-secondary'}
-                  onClick={() => setCurrentPage(page)}
-                >
-                  {page}
-                </Button>
+                <Button key={page} size="sm" variant={currentPage === page ? 'danger' : 'outline-secondary'} onClick={() => setCurrentPage(page)}>{page}</Button>
               ))}
               <Button size="sm" variant="outline-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(currentPage + 1)}>→</Button>
             </div>
@@ -331,18 +321,18 @@ const InstructorDashboard = () => {
       <Modal show={qrModal.show} onHide={closeQrModal} centered size="sm">
         <Modal.Header closeButton>
           <Modal.Title className="small">
-            <strong>{qrModal.course?.course_code}</strong> — Active Session
+{qrModal.course?.course_code} — {t('instructor.dashboard.activeSession')}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="text-center">
           <Badge bg={qrModal.timeLeft > 60 ? 'success' : 'danger'} className="fs-5 px-3 py-2 mb-3">
             {formatTime(qrModal.timeLeft)}
           </Badge>
-          <p className="text-muted small mb-3">Time remaining</p>
+          <p className="text-muted small mb-3">{t('instructor.generateQR.timeRemaining')}</p>
           {qrModal.data?.qr_code && (
             <Image src={qrModal.data.qr_code} fluid className="border rounded p-2" style={{ maxWidth: '250px' }} />
           )}
-          <p className="text-muted small mt-3">Show this QR code to students.</p>
+          <p className="text-muted small mt-3">{t('instructor.generateQR.showQR')}</p>
         </Modal.Body>
         <Modal.Footer className="justify-content-between">
           <Button
@@ -361,36 +351,36 @@ const InstructorDashboard = () => {
             }}
           >
             <StopCircleFill size={14} className="me-1" />
-            Cancel Session
+            {t('instructor.generateQR.cancelSession')}
           </Button>
-          <Button variant="secondary" size="sm" onClick={closeQrModal}>Close</Button>
+          <Button variant="secondary" size="sm" onClick={closeQrModal}>{t('common.close')}</Button>
         </Modal.Footer>
       </Modal>
 
       {/* Schedule Upload Modal */}
       <Modal show={showScheduleModal} onHide={() => setShowScheduleModal(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Upload Course Schedule</Modal.Title>
+          <Modal.Title>{t('common.uploadCourseSchedule')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Alert variant="info" className="small">
-            Excel file must contain: <strong>course_code</strong>, <strong>course_name</strong>, <strong>semester</strong>, <strong>group_name</strong> (optional), <strong>day</strong>, <strong>start_time</strong>, <strong>end_time</strong> columns.
-            <br />Day values: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
-            <br />Time format: HH:MM (e.g. 09:00)
-            <br />For multiple days or groups, add a new row.
+            {t('instructor.dashboard.scheduleUploadInfo')}
+            <br />{t('instructor.dashboard.scheduleUploadDays')}
+            <br />{t('instructor.dashboard.scheduleUploadTime')}
+            <br />{t('instructor.dashboard.scheduleUploadMultiple')}
           </Alert>
           <Button variant="outline-secondary" size="sm" className="mb-3 d-flex align-items-center gap-1" onClick={downloadScheduleTemplate}>
-            <Download size={14} /> Download Template
+            <Download size={14} /> {t('common.download')}
           </Button>
           <Form.Group>
-            <Form.Label>Select Excel File (.xlsx)</Form.Label>
+            <Form.Label>{t('common.selectExcelFile')}</Form.Label>
             <Form.Control type="file" accept=".xlsx,.xls" ref={scheduleFileRef} />
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowScheduleModal(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => setShowScheduleModal(false)}>{t('common.cancel')}</Button>
           <Button variant="danger" onClick={handleScheduleUpload} disabled={uploadLoading}>
-            {uploadLoading ? <Spinner size="sm" /> : 'Upload'}
+            {uploadLoading ? <Spinner size="sm" /> : t('common.upload')}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -400,12 +390,10 @@ const InstructorDashboard = () => {
         <Modal.Header closeButton>
           <Modal.Title>{confirmModal.title}</Modal.Title>
         </Modal.Header>
-        <Modal.Body>
-          <p>{confirmModal.message}</p>
-        </Modal.Body>
+        <Modal.Body><p>{confirmModal.message}</p></Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setConfirmModal({ ...confirmModal, show: false })}>Cancel</Button>
-          <Button variant="danger" onClick={handleConfirm}>Delete</Button>
+          <Button variant="secondary" onClick={() => setConfirmModal({ ...confirmModal, show: false })}>{t('common.cancel')}</Button>
+          <Button variant="danger" onClick={handleConfirm}>{t('common.delete')}</Button>
         </Modal.Footer>
       </Modal>
     </Container>

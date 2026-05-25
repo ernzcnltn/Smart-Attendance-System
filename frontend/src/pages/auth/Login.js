@@ -1,12 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Button, Alert, InputGroup, Spinner } from 'react-bootstrap';
+import { Form, Button, Alert, InputGroup, Spinner, Dropdown } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { EyeFill, EyeSlashFill, PersonFill, LockFill } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
 import { login } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
+import { useBranding } from '../../context/BrandingContext';
 import ForgotPasswordModal from './ForgotPasswordModal';
 
-/* ───────────── Desktop SVG Illustration ───────────── */
+const LANGUAGES = [
+  { code: 'tr', label: 'Türkçe' },
+  { code: 'en', label: 'English' },
+  { code: 'fr', label: 'Français' },
+  { code: 'ar', label: 'العربية' },
+  { code: 'ru', label: 'Русский' },
+];
+
 const AttendanceIllustration = () => (
   <svg viewBox="0 0 440 380" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', maxWidth: '400px', height: 'auto', filter: 'drop-shadow(0 10px 30px rgba(0,0,0,0.12))' }}>
     <rect x="70" y="50" width="300" height="240" rx="16" fill="#fff" />
@@ -46,7 +55,6 @@ const AttendanceIllustration = () => (
   </svg>
 );
 
-/* ── Compact mobile illustration ── */
 const MiniIllustration = () => (
   <svg viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '170px', height: 'auto', opacity: 0.9 }}>
     <rect x="0" y="5" width="55" height="50" rx="8" fill="#fff" opacity="0.9" />
@@ -59,8 +67,8 @@ const MiniIllustration = () => (
   </svg>
 );
 
-/* ───────────────── Component ───────────────── */
 const Login = () => {
+  const { t, i18n } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -70,12 +78,17 @@ const Login = () => {
   const [passFocused, setPassFocused] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
   const { updateUser } = useAuth();
+  const { branding } = useBranding();
+  const logoSrc = branding.school_logo || '/logo.png';
+  const universityName = branding.university_name || 'Final International University';
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
+  const currentLang = LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[1];
+
   useEffect(() => {
     const err = searchParams.get('error');
-    if (err === 'google_failed') setError('Google sign in failed. Please try again.');
+    if (err === 'google_failed') setError(t('login.googleFailed'));
     else if (err) setError(decodeURIComponent(err));
   }, []);
 
@@ -90,7 +103,7 @@ const Login = () => {
       else if (user.role === 'instructor') navigate('/instructor');
       else navigate('/admin');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed.');
+      setError(err.response?.data?.message || t('login.googleFailed'));
     } finally {
       setLoading(false);
     }
@@ -131,6 +144,19 @@ const Login = () => {
         .forgot-link:hover { color: #b71c1c; text-decoration: underline; }
         .google-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; background: #fff !important; border: 1.5px solid #e0e0e0 !important; border-radius: 10px !important; padding: 10px 16px !important; font-size: 14px !important; font-weight: 500 !important; color: #444 !important; transition: border-color 0.2s, box-shadow 0.2s !important; }
         .google-btn:hover { border-color: #c62828 !important; box-shadow: 0 0 0 3px rgba(198,40,40,0.08) !important; color: #222 !important; }
+        .lang-dropdown-btn { background: rgba(255,255,255,0.15) !important; border: 1px solid rgba(255,255,255,0.3) !important; border-radius: 8px !important; color: #fff !important; font-size: 12px !important; font-weight: 600 !important; padding: 5px 10px !important; display: flex; align-items: center; gap: 6px; }
+        .lang-dropdown-btn:hover { background: rgba(255,255,255,0.25) !important; }
+        .lang-dropdown-btn::after { display: none !important; }
+        .lang-dropdown-menu { min-width: 140px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.12); border: 1px solid #f0f0f0; }
+        .lang-dropdown-item { font-size: 13px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; }
+        .lang-dropdown-item:hover { background: #fff5f5; color: #c62828; }
+        .lang-dropdown-btn-right { background: #f9fafb !important; border: 1.5px solid #e0e0e0 !important; border-radius: 8px !important; color: #444 !important; font-size: 12px !important; font-weight: 700 !important; padding: 5px 12px !important; }
+        .lang-dropdown-btn-right:hover { border-color: #c62828 !important; color: #c62828 !important; }
+        .lang-dropdown-btn-right::after { display: none !important; }
+        .lang-dropdown-item.active { background: #fef2f2; color: #c62828; font-weight: 600; }
+        .login-lang-bar { position: absolute; top: 16px; right: 16px; z-index: 10; }
+        .login-lang-bar-mobile { display: none; position: absolute; top: 12px; right: 12px; z-index: 10; }
+        .login-lang-bar-mobile .lang-dropdown-btn { background: rgba(255,255,255,0.2) !important; }
         [data-bs-theme="dark"] .login-page, [data-bs-theme="dark"] .login-page * { color-scheme: light; }
         [data-bs-theme="dark"] .login-form-wrap .form-control { background: rgba(255,255,255,0.9) !important; color: #222 !important; border-color: #ddd !important; }
         [data-bs-theme="dark"] .login-form-wrap .form-control:focus { background: #fff !important; border-color: #c62828 !important; }
@@ -143,6 +169,8 @@ const Login = () => {
           .login-page::before, .login-page::after { display: none; }
           .login-card { flex-direction: column; width: 100%; max-width: 100%; min-height: 100vh; border-radius: 0; border: none; box-shadow: none; background: #fff; backdrop-filter: none; -webkit-backdrop-filter: none; }
           .login-left { display: none !important; }
+          .login-lang-bar { display: none; }
+          .login-lang-bar-mobile { display: block; }
           .login-mobile-header { display: flex; flex-direction: column; align-items: center; background: linear-gradient(145deg, #c62828 0%, #d32f2f 40%, #e53935 80%, #ef5350 100%); padding: 36px 20px 30px; position: relative; overflow: hidden; flex-shrink: 0; }
           .login-mobile-header::before { content: ''; position: absolute; width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,0.06); top: -50px; left: -50px; }
           .login-mobile-header::after { content: ''; position: absolute; width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,0.04); bottom: -30px; right: -30px; }
@@ -163,33 +191,58 @@ const Login = () => {
 
       <div className="login-page">
         <div className="login-card">
-          <div className="login-left">
+
+          {/* ─── Sol Panel ─── */}
+          <div className="login-left" style={{ position: 'relative' }}>
+
             <AttendanceIllustration />
-            <h2>Smart Attendance<br />Management System</h2>
-            <p>Track attendance seamlessly with QR codes, facial recognition, and real-time analytics — all in one place.</p>
+            <h2>{t('nav.smartAttendance')}</h2>
+            <p>{t('login.leftDesc')}</p>
           </div>
 
-          <div className="login-mobile-header">
+          {/* ─── Mobil Header ─── */}
+          <div className="login-mobile-header" style={{ position: 'relative' }}>
             <MiniIllustration />
-            <h4>Smart Attendance System</h4>
-            <p>Final International University</p>
+            <h4>{t('nav.smartAttendance')}</h4>
+            <p>{universityName}</p>
           </div>
 
-          <div className="login-right">
+          {/* ─── Sağ Panel (Form) ─── */}
+          <div className="login-right" style={{ position: 'relative' }}>
+            {/* Dil dropdown - sağ panel sağ üst köşe */}
+            <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10 }}>
+              <Dropdown align="end">
+                <Dropdown.Toggle className="lang-dropdown-btn-right">
+                  {currentLang.code.toUpperCase()}
+                </Dropdown.Toggle>
+                <Dropdown.Menu className="lang-dropdown-menu">
+                  {LANGUAGES.map(lang => (
+                    <Dropdown.Item
+                      key={lang.code}
+                      className={`lang-dropdown-item ${i18n.language === lang.code ? 'active' : ''}`}
+                      onClick={() => i18n.changeLanguage(lang.code)}
+                    >
+                      {lang.label}
+                    </Dropdown.Item>
+                  ))}
+                </Dropdown.Menu>
+              </Dropdown>
+            </div>
             <div className="login-form-wrap">
               <div className="text-center mb-1">
-                <img src="/logo.png" alt="FIU Logo" style={{ height: '52px', objectFit: 'contain' }} />
+                <img src={logoSrc} alt="Logo" style={{ height: '52px', objectFit: 'contain' }} />
               </div>
-              <h3 style={{ fontSize: '24px', fontWeight: '700', color: '#1a1a2e', textAlign: 'center', marginBottom: '2px' }}>Welcome Back</h3>
-              <p style={{ fontSize: '13px', color: '#999', textAlign: 'center', marginBottom: '20px' }}>Sign in to continue to your dashboard</p>
+              <h3 style={{ fontSize: '24px', fontWeight: '700', color: '#1a1a2e', textAlign: 'center', marginBottom: '2px' }}>
+                {t('login.welcomeBack')}
+              </h3>
+              <p style={{ fontSize: '13px', color: '#999', textAlign: 'center', marginBottom: '20px' }}>
+                {t('login.signInToContinue')}
+              </p>
 
               {error && <Alert variant="danger" className="py-2 small" style={{ borderRadius: '10px', fontSize: '13px' }}>{error}</Alert>}
 
-              {/* Google Sign In Button */}
-              <Button
-                className="google-btn mb-2"
-                onClick={() => { window.location.href = `${process.env.REACT_APP_API_URL}/auth/google`; }}
-              >
+              <Button className="google-btn mb-2"
+                onClick={() => { window.location.href = `${process.env.REACT_APP_API_URL}/auth/google`; }}>
                 <svg width="18" height="18" viewBox="0 0 48 48">
                   <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
                   <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
@@ -197,35 +250,43 @@ const Login = () => {
                   <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
                   <path fill="none" d="M0 0h48v48H0z"/>
                 </svg>
-                Sign in with Google
+                {t('login.signInWithGoogle')}
               </Button>
 
-              <div className="login-divider"><span>or sign in with email</span></div>
+              <div className="login-divider"><span>{t('login.orSignInWithEmail')}</span></div>
 
               <Form onSubmit={handleSubmit}>
                 <Form.Group className="mb-3">
-                  <Form.Label>Email</Form.Label>
+                  <Form.Label>{t('login.email')}</Form.Label>
                   <InputGroup>
                     <InputGroup.Text className={emailFocused ? 'focused' : ''} style={{ borderRadius: '10px 0 0 10px', borderRight: 'none' }}>
                       <PersonFill size={15} color={emailFocused ? '#c62828' : '#aaa'} />
                     </InputGroup.Text>
-                    <Form.Control type="email" value={email} onChange={(e) => setEmail(e.target.value)} onFocus={() => setEmailFocused(true)} onBlur={() => setEmailFocused(false)} placeholder="you@fiu.edu.tr" maxLength={50} minLength={5} required style={{ borderRadius: '0 10px 10px 0', borderLeft: 'none' }} />
+                    <Form.Control type="email" value={email} onChange={e => setEmail(e.target.value)}
+                      onFocus={() => setEmailFocused(true)} onBlur={() => setEmailFocused(false)}
+                      placeholder="you@fiu.edu.tr" maxLength={50} minLength={5} required
+                      style={{ borderRadius: '0 10px 10px 0', borderLeft: 'none' }} />
                   </InputGroup>
                 </Form.Group>
 
                 <Form.Group className="mb-1">
                   <div className="d-flex justify-content-between align-items-center mb-1">
-                    <Form.Label className="mb-0">Password</Form.Label>
+                    <Form.Label className="mb-0">{t('login.password')}</Form.Label>
                     <button type="button" className="forgot-link" onClick={() => setShowForgot(true)}>
-                      Forgot password?
+                      {t('login.forgotPassword')}
                     </button>
                   </div>
                   <InputGroup>
                     <InputGroup.Text className={passFocused ? 'focused' : ''} style={{ borderRadius: '10px 0 0 10px', borderRight: 'none' }}>
                       <LockFill size={14} color={passFocused ? '#c62828' : '#aaa'} />
                     </InputGroup.Text>
-                    <Form.Control type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} onFocus={() => setPassFocused(true)} onBlur={() => setPassFocused(false)} placeholder="••••••••" maxLength={15} minLength={6} required style={{ borderRadius: '0', borderLeft: 'none', borderRight: 'none' }} />
-                    <Button variant="link" onClick={() => setShowPassword(!showPassword)} tabIndex={-1} className={`eye-toggle ${passFocused ? 'focused' : ''}`} style={{ borderRadius: '0 10px 10px 0', textDecoration: 'none' }}>
+                    <Form.Control type={showPassword ? 'text' : 'password'} value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      onFocus={() => setPassFocused(true)} onBlur={() => setPassFocused(false)}
+                      placeholder="••••••••" maxLength={15} minLength={6} required
+                      style={{ borderRadius: '0', borderLeft: 'none', borderRight: 'none' }} />
+                    <Button variant="link" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}
+                      className={`eye-toggle ${passFocused ? 'focused' : ''}`} style={{ borderRadius: '0 10px 10px 0', textDecoration: 'none' }}>
                       {showPassword ? <EyeSlashFill size={15} color={passFocused ? '#c62828' : '#888'} /> : <EyeFill size={15} color={passFocused ? '#c62828' : '#888'} />}
                     </Button>
                   </InputGroup>
@@ -234,11 +295,11 @@ const Login = () => {
                 <div className="mb-4" />
 
                 <Button type="submit" className="w-100 login-submit" disabled={loading}>
-                  {loading ? (<><Spinner size="sm" className="me-2" />Signing in...</>) : 'Sign In'}
+                  {loading ? <><Spinner size="sm" className="me-2" />{t('login.signingIn')}</> : t('login.signIn')}
                 </Button>
               </Form>
 
-              <div className="login-footer">Final International University &copy; {new Date().getFullYear()}</div>
+              <div className="login-footer">{universityName} &copy; {new Date().getFullYear()}</div>
             </div>
           </div>
         </div>

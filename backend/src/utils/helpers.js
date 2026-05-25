@@ -21,10 +21,12 @@ const successResponse = (res, data, message = 'Success', statusCode = 200) => {
   });
 };
 
-const errorResponse = (res, message = 'Something went wrong', statusCode = 500) => {
+// code parametresi eklendi — frontend buna göre çeviri yapacak
+const errorResponse = (res, message = 'Something went wrong', statusCode = 500, code = null) => {
   return res.status(statusCode).json({
     success: false,
-    message
+    message,
+    code
   });
 };
 

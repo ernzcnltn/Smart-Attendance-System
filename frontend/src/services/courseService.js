@@ -33,4 +33,6 @@ export const getCourseStudents = async (uuid) => {
 export const deleteCourse = async (course_uuid) => {
   const response = await api.delete(`/courses/${course_uuid}`);
   return response.data;
+
 };
+

@@ -1,39 +1,22 @@
 import React, { useState, useMemo } from 'react';
 import { Form, Button, Alert, Spinner, InputGroup } from 'react-bootstrap';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { LockFill, EyeFill, EyeSlashFill, CheckCircleFill, XCircleFill } from 'react-bootstrap-icons';
 import api from '../../services/api';
 
-const passwordRules = [
-  { label: 'At least 6 characters', test: (p) => p.length >= 6 },
-  { label: 'At most 15 characters', test: (p) => p.length <= 15 },
-  { label: 'At least one uppercase letter', test: (p) => /[A-Z]/.test(p) },
-  { label: 'At least one number', test: (p) => /[0-9]/.test(p) },
-];
-
-const PasswordCriteria = ({ password }) => {
-  if (!password) return null;
-  return (
-    <div style={{ marginTop: '8px', padding: '10px 14px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', border: '1px solid #f0f0f0' }}>
-      {passwordRules.map((rule, i) => {
-        const ok = rule.test(password);
-        return (
-          <div key={i} className="d-flex align-items-center gap-2 mb-1" style={{ fontSize: '12px' }}>
-            {ok
-              ? <CheckCircleFill size={12} color="#16a34a" />
-              : <XCircleFill size={12} color="#dc2626" />}
-            <span style={{ color: ok ? '#16a34a' : '#dc2626' }}>{rule.label}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
 const ResetPassword = () => {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token');
+
+  const passwordRules = [
+    { label: t('resetPassword.rules.minLength'), test: (p) => p.length >= 6 },
+    { label: t('resetPassword.rules.maxLength'), test: (p) => p.length <= 15 },
+    { label: t('resetPassword.rules.uppercase'), test: (p) => /[A-Z]/.test(p) },
+    { label: t('resetPassword.rules.number'),    test: (p) => /[0-9]/.test(p) },
+  ];
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -49,11 +32,11 @@ const ResetPassword = () => {
     e.preventDefault();
     setError('');
     if (!allRulesPassed) { setError('Please meet all password requirements.'); return; }
-    if (newPassword !== confirmPassword) { setError('Passwords do not match.'); return; }
+    if (newPassword !== confirmPassword) { setError(t('resetPassword.noMatch')); return; }
     setLoading(true);
     try {
       await api.post('/auth/reset-password', { token, new_password: newPassword });
-      setSuccess('Password reset successfully! Redirecting to login...');
+      setSuccess(t('resetPassword.success'));
       setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reset password.');
@@ -66,8 +49,8 @@ const ResetPassword = () => {
     return (
       <div style={pageStyle}>
         <div style={cardStyle}>
-          <Alert variant="danger">Invalid or missing reset link.</Alert>
-          <Button variant="danger" className="w-100" onClick={() => navigate('/login')}>Back to Login</Button>
+          <Alert variant="danger">{t('resetPassword.invalidLink')}</Alert>
+          <Button variant="danger" className="w-100" onClick={() => navigate('/login')}>{t('resetPassword.backToLogin')}</Button>
         </div>
       </div>
     );
@@ -86,13 +69,12 @@ const ResetPassword = () => {
       `}</style>
 
       <div style={cardStyle}>
-        {/* Header */}
         <div style={{ background: 'linear-gradient(135deg, #c62828, #e53935)', borderRadius: '16px 16px 0 0', padding: '28px 24px', textAlign: 'center', margin: '-32px -32px 28px' }}>
           <div style={{ width: '52px', height: '52px', background: 'rgba(255,255,255,0.2)', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
             <LockFill size={24} color="white" />
           </div>
-          <h5 style={{ color: '#fff', fontWeight: 700, margin: 0 }}>Set New Password</h5>
-          <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px', margin: '4px 0 0' }}>Choose a strong password for your account</p>
+          <h5 style={{ color: '#fff', fontWeight: 700, margin: 0 }}>{t('resetPassword.title')}</h5>
+          <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px', margin: '4px 0 0' }}>{t('resetPassword.description')}</p>
         </div>
 
         {error && <Alert variant="danger" className="py-2" style={{ borderRadius: '10px', fontSize: '13px' }}>{error}</Alert>}
@@ -101,7 +83,7 @@ const ResetPassword = () => {
         {!success && (
           <Form onSubmit={handleSubmit}>
             <Form.Group className="mb-3">
-              <Form.Label style={{ fontSize: '13px', fontWeight: 600, color: '#444' }}>New Password</Form.Label>
+              <Form.Label style={{ fontSize: '13px', fontWeight: 600, color: '#444' }}>{t('resetPassword.newPassword')}</Form.Label>
               <InputGroup>
                 <InputGroup.Text className="rp-icon" style={{ borderRadius: '10px 0 0 10px', borderRight: 'none' }}>
                   <LockFill size={14} color="#aaa" />
@@ -119,11 +101,23 @@ const ResetPassword = () => {
                   {showPass ? <EyeSlashFill size={14} color="#888" /> : <EyeFill size={14} color="#888" />}
                 </Button>
               </InputGroup>
-              <PasswordCriteria password={newPassword} />
+              {newPassword && (
+                <div style={{ marginTop: '8px', padding: '10px 14px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', border: '1px solid #f0f0f0' }}>
+                  {passwordRules.map((rule, i) => {
+                    const ok = rule.test(newPassword);
+                    return (
+                      <div key={i} className="d-flex align-items-center gap-2 mb-1" style={{ fontSize: '12px' }}>
+                        {ok ? <CheckCircleFill size={12} color="#16a34a" /> : <XCircleFill size={12} color="#dc2626" />}
+                        <span style={{ color: ok ? '#16a34a' : '#dc2626' }}>{rule.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </Form.Group>
 
             <Form.Group className="mb-4">
-              <Form.Label style={{ fontSize: '13px', fontWeight: 600, color: '#444' }}>Confirm Password</Form.Label>
+              <Form.Label style={{ fontSize: '13px', fontWeight: 600, color: '#444' }}>{t('resetPassword.confirmPassword')}</Form.Label>
               <InputGroup>
                 <InputGroup.Text className="rp-icon" style={{ borderRadius: '10px 0 0 10px', borderRight: 'none' }}>
                   <LockFill size={14} color="#aaa" />
@@ -143,25 +137,25 @@ const ResetPassword = () => {
               </InputGroup>
               {confirmPassword && newPassword !== confirmPassword && (
                 <div className="d-flex align-items-center gap-1 mt-1" style={{ fontSize: '12px', color: '#dc2626' }}>
-                  <XCircleFill size={12} /> Passwords do not match
+                  <XCircleFill size={12} /> {t('resetPassword.noMatch')}
                 </div>
               )}
               {confirmPassword && newPassword === confirmPassword && allRulesPassed && (
                 <div className="d-flex align-items-center gap-1 mt-1" style={{ fontSize: '12px', color: '#16a34a' }}>
-                  <CheckCircleFill size={12} /> Passwords match
+                  <CheckCircleFill size={12} /> {t('resetPassword.match')}
                 </div>
               )}
             </Form.Group>
 
             <Button type="submit" className="w-100 rp-btn" disabled={loading || !allRulesPassed || newPassword !== confirmPassword}>
-              {loading ? <><Spinner size="sm" className="me-2" />Resetting...</> : 'Reset Password'}
+              {loading ? <><Spinner size="sm" className="me-2" />{t('resetPassword.resetting')}</> : t('resetPassword.reset')}
             </Button>
           </Form>
         )}
 
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
           <Button variant="link" style={{ color: '#c62828', fontSize: '13px', textDecoration: 'none' }} onClick={() => navigate('/login')}>
-            ← Back to Login
+            ← {t('resetPassword.backToLogin')}
           </Button>
         </div>
       </div>

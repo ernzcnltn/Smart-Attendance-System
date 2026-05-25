@@ -1,12 +1,11 @@
-// Bu bileşeni Login.jsx'e import edip kullan
-// import ForgotPasswordModal from './ForgotPasswordModal';
-
 import React, { useState } from 'react';
 import { Modal, Form, Button, Alert, Spinner, InputGroup } from 'react-bootstrap';
 import { EnvelopeFill } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 
 const ForgotPasswordModal = ({ show, onHide }) => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,24 +21,22 @@ const ForgotPasswordModal = ({ show, onHide }) => {
     e.preventDefault();
     setError(''); setSuccess('');
 
-    // Email format kontrolu
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      setError('Please enter a valid email address.');
+      setError(t('forgotPassword.invalidEmail'));
       return;
     }
 
-    // Okul domain kontrolu
     const schoolDomain = process.env.REACT_APP_SCHOOL_DOMAIN || 'final.edu.tr';
     if (!email.endsWith(`@${schoolDomain}`)) {
-      setError(`Only @${schoolDomain} email addresses are allowed.`);
+      setError(t('forgotPassword.invalidDomain', { domain: schoolDomain }));
       return;
     }
 
     setLoading(true);
     try {
       await api.post('/auth/forgot-password', { email });
-      setSuccess('If this email is registered, a reset link has been sent. Please check your inbox.');
+      setSuccess(t('forgotPassword.successMessage'));
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send reset email.');
     } finally {
@@ -59,9 +56,9 @@ const ForgotPasswordModal = ({ show, onHide }) => {
           }}>
             <EnvelopeFill size={22} color="white" />
           </div>
-          <h5 style={{ fontWeight: 700, margin: 0 }}>Forgot Password?</h5>
+          <h5 style={{ fontWeight: 700, margin: 0 }}>{t('forgotPassword.title')}</h5>
           <p style={{ color: '#999', fontSize: '13px', margin: '4px 0 0' }}>
-            Enter your email and we'll send you a reset link.
+            {t('forgotPassword.description')}
           </p>
         </div>
       </Modal.Header>
@@ -70,14 +67,18 @@ const ForgotPasswordModal = ({ show, onHide }) => {
         {success ? (
           <div>
             <Alert variant="success" className="py-3" style={{ borderRadius: '10px', fontSize: '13px' }}>
-              <strong>✓ Email sent!</strong><br />{success}
+              <strong>✓ {t('forgotPassword.emailSent')}</strong><br />{success}
             </Alert>
-            <Button variant="danger" className="w-100" style={{ borderRadius: '10px' }} onClick={handleClose}>Close</Button>
+            <Button variant="danger" className="w-100" style={{ borderRadius: '10px' }} onClick={handleClose}>
+              {t('common.close')}
+            </Button>
           </div>
         ) : (
           <Form onSubmit={handleSubmit}>
             <Form.Group className="mb-4">
-              <Form.Label style={{ fontSize: '13px', fontWeight: 600, color: '#444' }}>Email Address</Form.Label>
+              <Form.Label style={{ fontSize: '13px', fontWeight: 600, color: '#444' }}>
+                {t('forgotPassword.emailLabel')}
+              </Form.Label>
               <InputGroup>
                 <InputGroup.Text style={{
                   background: 'rgba(255,255,255,0.85)', borderRight: 'none',
@@ -114,7 +115,7 @@ const ForgotPasswordModal = ({ show, onHide }) => {
                 boxShadow: '0 4px 18px rgba(183,28,28,0.30)'
               }}
             >
-              {loading ? <><Spinner size="sm" className="me-2" />Sending...</> : 'Send Reset Link'}
+              {loading ? <><Spinner size="sm" className="me-2" />{t('forgotPassword.sending')}</> : t('forgotPassword.send')}
             </Button>
           </Form>
         )}

@@ -522,8 +522,12 @@ def get_challenge_route():
     if ctype == 'registration':
         step = int(request.args.get('step', 0))
         return jsonify({'success': True, 'challenge': REGISTRATION_CHALLENGES[step % len(REGISTRATION_CHALLENGES)]})
-    available = [c for c in VERIFICATION_CHALLENGES if c['id'] != exclude] or VERIFICATION_CHALLENGES
-    return jsonify({'success': True, 'challenge': random.choice(available)})
+    available = [c for c in VERIFICATION_CHALLENGES if c['id'] != exclude]
+    if not available:
+        available = VERIFICATION_CHALLENGES
+    # Onceki challenge ile ayni olmasin diye shuffle yap
+    random.shuffle(available)
+    return jsonify({'success': True, 'challenge': available[0]})
 
 @app.route('/register', methods=['POST'])
 def register_face():

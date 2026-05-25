@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { setToken, setUser } from '../../utils/helpers';
 import api from '../../services/api';
@@ -8,6 +9,7 @@ const GoogleSuccess = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { updateUser } = useAuth();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -34,7 +36,7 @@ const GoogleSuccess = () => {
   return (
     <div className="text-center mt-5">
       <div className="spinner-border text-primary" />
-      <p className="mt-3">Signing you in...</p>
+      <p className="mt-3">{t('login.signingIn')}</p>
     </div>
   );
 };

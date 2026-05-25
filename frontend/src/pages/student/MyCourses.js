@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Container, Row, Col, Card, Badge, Spinner, Alert, Modal, Button, Tab, Nav, Table, ProgressBar, Form } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { getMyCourses } from '../../services/courseService';
 import { getMyAttendanceStats, getMySessionHistory } from '../../services/attendanceService';
 import api from '../../services/api';
@@ -14,6 +15,7 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const ITEMS_PER_PAGE = 10;
 
 const SessionTooltip = ({ active, payload }) => {
+  const { t, i18n } = useTranslation();
   if (!active || !payload?.length) return null;
   const attended = payload[0]?.payload?.attended;
   const date = payload[0]?.payload?.date;
@@ -26,7 +28,7 @@ const SessionTooltip = ({ active, payload }) => {
     }}>
       <p style={{ color: '#94a3b8', margin: '0 0 4px', fontWeight: 600, fontSize: '11px' }}>{date}</p>
       <p style={{ margin: 0, fontWeight: 700, color: attended ? '#4ade80' : '#f87171' }}>
-        {attended ? '✓ Attended' : '✗ Absent'}
+        {attended ? t('myCourses.tooltipAttended') : t('myCourses.tooltipAbsent')}
       </p>
     </div>
   );
@@ -34,6 +36,9 @@ const SessionTooltip = ({ active, payload }) => {
 
 const MyCourses = () => {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const localeMap = { tr: 'tr-TR', fr: 'fr-FR', ar: 'ar-SA', ru: 'ru-RU', en: 'en-GB' };
+  const locale = localeMap[i18n.language] || 'en-GB';
   const [courses, setCourses] = useState([]);
   const [schedules, setSchedules] = useState({});
   const [attendanceStats, setAttendanceStats] = useState([]);
@@ -104,23 +109,26 @@ const MyCourses = () => {
   const handleCourseClick = (course) => {
     const status = getCourseStatus(course.uuid);
     if (status === 'active') { navigate(`/student/face-attendance/${course.uuid}`); return; }
-    if (status === 'no_schedule') { setPopup({ show: true, message: 'No schedule has been set for this course yet.' }); return; }
+    if (status === 'no_schedule') { setPopup({ show: true, message: t('myCourses.noScheduleMsg') }); return; }
     if (status === 'not_today') {
-      const days = (schedules[course.uuid] || []).map(s => s.day).join(', ');
-      setPopup({ show: true, message: `This course is not scheduled for today. Class days: ${days}` });
+      const days = (schedules[course.uuid] || []).map(s => t(`days.${s.day}`)).join(', ');
+      setPopup({ show: true, message: t('myCourses.notTodayMsg', { days }) });
       return;
     }
-    if (status === 'ended') { setPopup({ show: true, message: "Today's class for this course has already ended." }); return; }
-    if (status?.status === 'upcoming') { setPopup({ show: true, message: `Class hasn't started yet. It will begin at ${status.start_time} and end at ${status.end_time}.` }); return; }
+    if (status === 'ended') { setPopup({ show: true, message: t('myCourses.endedMsg') }); return; }
+    if (status?.status === 'upcoming') {
+      setPopup({ show: true, message: t('myCourses.upcomingMsg', { start: status.start_time, end: status.end_time }) });
+      return;
+    }
   };
 
   const getStatusBadge = (uuid) => {
     const s = getCourseStatus(uuid);
-    if (s === 'active') return <Badge bg="success">Active</Badge>;
-    if (s === 'no_schedule') return <Badge bg="secondary">No Schedule</Badge>;
-    if (s === 'not_today') return <Badge bg="secondary">Not Today</Badge>;
-    if (s === 'ended') return <Badge bg="danger">Ended</Badge>;
-    if (s?.status === 'upcoming') return <Badge bg="primary">Starts {s.start_time}</Badge>;
+    if (s === 'active') return <Badge bg="success">{t('common.active')}</Badge>;
+    if (s === 'no_schedule') return <Badge bg="secondary">{t('myCourses.noSchedule')}</Badge>;
+    if (s === 'not_today') return <Badge bg="secondary">{t('myCourses.notToday')}</Badge>;
+    if (s === 'ended') return <Badge bg="danger">{t('myCourses.ended')}</Badge>;
+    if (s?.status === 'upcoming') return <Badge bg="primary">{t('myCourses.starts', { time: s.start_time })}</Badge>;
     return null;
   };
 
@@ -153,7 +161,7 @@ const MyCourses = () => {
     return (
       <div className="d-flex justify-content-between align-items-center mt-3">
         <small className="text-muted">
-          Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, sortedCourses.length)} of {sortedCourses.length}
+          {t('common.showing', { from: (currentPage - 1) * ITEMS_PER_PAGE + 1, to: Math.min(currentPage * ITEMS_PER_PAGE, sortedCourses.length), total: sortedCourses.length })}
         </small>
         <div className="d-flex gap-1 flex-wrap">
           <Button size="sm" variant="outline-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>&larr;</Button>
@@ -210,13 +218,13 @@ const MyCourses = () => {
         }
       `}</style>
 
-      <h4 className="mb-4 fw-bold">My Courses</h4>
+      <h4 className="mb-4 fw-bold">{t('myCourses.title')}</h4>
       {error && <Alert variant="danger">{error}</Alert>}
 
       <Tab.Container defaultActiveKey="courses">
         <Nav variant="tabs" className="mb-4">
-          <Nav.Item><Nav.Link eventKey="courses">Courses</Nav.Link></Nav.Item>
-          <Nav.Item><Nav.Link eventKey="overview">Overview</Nav.Link></Nav.Item>
+          <Nav.Item><Nav.Link eventKey="courses">{t('myCourses.courses')}</Nav.Link></Nav.Item>
+          <Nav.Item><Nav.Link eventKey="overview">{t('myCourses.overview')}</Nav.Link></Nav.Item>
         </Nav>
 
         <Tab.Content>
@@ -227,7 +235,6 @@ const MyCourses = () => {
                 onClick={() => { setViewMode('grid'); setCurrentPage(1); }}>
                 <GridFill size={15} />
               </Button>
-              {/* List view sadece desktop'ta görünür */}
               <Button variant={viewMode === 'list' ? 'danger' : 'outline-secondary'} size="sm"
                 className="d-none d-md-inline-flex"
                 onClick={() => { setViewMode('list'); setCurrentPage(1); }}>
@@ -237,7 +244,7 @@ const MyCourses = () => {
 
             {courses.length === 0 ? (
               <Card className="shadow-sm border-0 text-center py-5">
-                <Card.Body><h5 className="text-muted">No courses enrolled yet.</h5></Card.Body>
+                <Card.Body><h5 className="text-muted">{t('myCourses.noCoursesYet')}</h5></Card.Body>
               </Card>
             ) : viewMode === 'grid' ? (
               <>
@@ -270,14 +277,14 @@ const MyCourses = () => {
                             </div>
                             <div className="d-flex align-items-center gap-2 mb-1">
                               <CalendarFill size={12} className="text-muted" />
-                              <span className="small text-muted">{course.semester}</span>
+                              <span className="small text-muted">{(() => { const p = course.semester.split(' '); const term = p[p.length-1]; return `${p.slice(0,-1).join(' ')} ${t('terms.'+term, term)}`; })()}</span>
                             </div>
                             {schedules[course.uuid]?.length > 0 && (
                               <div className="mt-2">
                                 {schedules[course.uuid].map((s, i) => (
                                   <div key={i} className="d-flex align-items-center gap-2">
                                     <ClockFill size={11} className="text-muted" />
-                                    <span className="small text-muted">{s.day}: {s.start_time.substring(0, 5)} – {s.end_time.substring(0, 5)}</span>
+                                    <span className="small text-muted">{t(`days.${s.day}`)}: {s.start_time.substring(0, 5)} – {s.end_time.substring(0, 5)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -288,7 +295,7 @@ const MyCourses = () => {
                               return (
                                 <div className="mt-3">
                                   <div className="d-flex justify-content-between mb-1">
-                                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>Attendance</span>
+                                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>{t('myCourses.attendance')}</span>
                                     <span style={{ fontSize: '11px', fontWeight: 600, color: stat.percentage >= stat.threshold ? '#16a34a' : '#dc2626' }}>
                                       {stat.percentage}%
                                     </span>
@@ -306,25 +313,24 @@ const MyCourses = () => {
                 <PaginationBar />
               </>
             ) : (
-              /* List view — sadece desktop */
               <>
                 <Card className="shadow-sm border-0" style={{ borderRadius: '14px', overflow: 'hidden' }}>
                   <Card.Body className="p-0">
                     <Table hover className="mb-0">
                       <thead className="table-dark">
                         <tr>
-                          <th>Course</th>
-                          <th>Instructor</th>
-                          <th>Schedule</th>
+                          <th>{t('myCourses.course')}</th>
+                          <th>{t('myAttendance.instructor')}</th>
+                          <th>{t('myCourses.schedule')}</th>
                           <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={handleAttendanceSort}>
                             <div className="d-flex align-items-center gap-1">
-                              Attendance
+                              {t('myCourses.attendance')}
                               <span style={{ opacity: attendanceSort ? 1 : 0.4 }}>
                                 {attendanceSort === 'asc' ? '↑' : attendanceSort === 'desc' ? '↓' : '↕'}
                               </span>
                             </div>
                           </th>
-                          <th>Status</th>
+                          <th>{t('common.status')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -340,7 +346,7 @@ const MyCourses = () => {
                               <td className="small">{course.instructor_name}</td>
                               <td className="small">
                                 {schedules[course.uuid]?.map((s, i) => (
-                                  <div key={i}>{s.day}: {s.start_time.substring(0, 5)}–{s.end_time.substring(0, 5)}</div>
+                                  <div key={i}>{t(`days.${s.day}`)}: {s.start_time.substring(0, 5)}–{s.end_time.substring(0, 5)}</div>
                                 ))}
                               </td>
                               <td style={{ minWidth: '110px' }}>
@@ -369,27 +375,19 @@ const MyCourses = () => {
           {/* ─── Tab 2: Overview ─── */}
           <Tab.Pane eventKey="overview">
             {courses.length === 0 ? (
-              <p className="text-muted">No courses enrolled yet.</p>
+              <p className="text-muted">{t('myCourses.noCoursesYet')}</p>
             ) : (
               <>
-                {/* Course Selector */}
                 <Card className="shadow-sm border-0 mb-4" style={{ borderRadius: '14px' }}>
                   <Card.Body className="p-4">
-                    <p className="mb-2 fw-semibold" style={{
-                      fontSize: '0.72rem', letterSpacing: '0.08em',
-                      textTransform: 'uppercase', color: '#dc2626'
-                    }}>
-                      Select Course
+                    <p className="mb-2 fw-semibold" style={{ fontSize: '0.72rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#dc2626' }}>
+                      {t('myCourses.selectCourse')}
                     </p>
                     <Form.Select
                       className="course-select"
                       value={selectedCourseUUID}
                       onChange={e => setSelectedCourseUUID(e.target.value)}
-                      style={{
-                        borderRadius: '10px', fontWeight: 600,
-                        fontSize: '0.95rem', borderColor: 'rgba(220,38,38,0.3)',
-                        padding: '10px 14px', cursor: 'pointer'
-                      }}
+                      style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.95rem', borderColor: 'rgba(220,38,38,0.3)', padding: '10px 14px', cursor: 'pointer' }}
                     >
                       {courses.map(c => (
                         <option key={c.uuid} value={c.uuid}>{c.course_code} — {c.course_name}</option>
@@ -398,22 +396,21 @@ const MyCourses = () => {
                   </Card.Body>
                 </Card>
 
-                {/* Detail Panel */}
                 {selectedCourse && (() => {
                   const stat = selectedStat;
                   const sch = schedules[selectedCourse.uuid] || [];
 
                   const barData = stat ? [
-                    { name: 'Attended', value: stat.attended_sessions, color: '#16a34a' },
-                    { name: 'Missed', value: stat.total_sessions - stat.attended_sessions, color: '#dc2626' },
+                    { name: t('myCourses.attended'), value: stat.attended_sessions, color: '#16a34a' },
+                    { name: t('myCourses.missed'), value: stat.total_sessions - stat.attended_sessions, color: '#dc2626' },
                   ] : [];
 
                   const rawHistory = sessionHistories[selectedCourse.uuid] || [];
                   const areaData = rawHistory.map((s) => {
                     const d = new Date(s.session_date);
                     return {
-                      session: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
-                      date: d.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+                      session: d.toLocaleDateString(locale, { day: '2-digit', month: 'short' }),
+                      date: d.toLocaleDateString(locale, { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
                       attended: s.attended,
                       value: s.attended ? 100 : 0,
                       threshold: stat ? stat.threshold : 70
@@ -432,7 +429,7 @@ const MyCourses = () => {
                                 <PersonFill size={12} /> {selectedCourse.instructor_name}
                               </span>
                               <span className="small text-muted d-flex align-items-center gap-1">
-                                <CalendarFill size={12} /> {selectedCourse.semester}
+                                <CalendarFill size={12} /> {(() => { const parts = selectedCourse.semester.split(' '); const term = parts[parts.length - 1]; const year = parts.slice(0, -1).join(' '); return `${year} ${t(`terms.${term}`, term)}`; })()}
                               </span>
                             </div>
                           </div>
@@ -442,7 +439,7 @@ const MyCourses = () => {
                           <div className="mt-2 d-flex gap-3 flex-wrap">
                             {sch.map((s, i) => (
                               <span key={i} className="small text-muted d-flex align-items-center gap-1">
-                                <ClockFill size={11} /> {s.day}: {s.start_time.substring(0, 5)}–{s.end_time.substring(0, 5)}
+                                <ClockFill size={11} /> {t(`days.${s.day}`)}: {s.start_time.substring(0, 5)}–{s.end_time.substring(0, 5)}
                               </span>
                             ))}
                           </div>
@@ -454,9 +451,9 @@ const MyCourses = () => {
                           <>
                             <Row className="mb-4 g-3">
                               {[
-                                { label: 'Attended', value: stat.attended_sessions, color: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
-                                { label: 'Total Sessions', value: stat.total_sessions, color: '#3b82f6', bg: 'rgba(59,130,246,0.08)' },
-                                { label: 'Attendance Rate', value: `${stat.percentage}%`, color: stat.percentage >= stat.threshold ? '#16a34a' : '#dc2626', bg: stat.percentage >= stat.threshold ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' },
+                                { label: t('myCourses.attended'), value: stat.attended_sessions, color: '#16a34a', bg: 'rgba(22,163,74,0.08)' },
+                                { label: t('myCourses.totalSessions'), value: stat.total_sessions, color: '#3b82f6', bg: 'rgba(59,130,246,0.08)' },
+                                { label: t('myCourses.attendanceRate'), value: `${stat.percentage}%`, color: stat.percentage >= stat.threshold ? '#16a34a' : '#dc2626', bg: stat.percentage >= stat.threshold ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' },
                               ].map((item, i) => (
                                 <Col md={4} xs={12} key={i}>
                                   <div style={{ background: item.bg, borderRadius: '12px', padding: '16px', textAlign: 'center', border: `1px solid ${item.color}20` }}>
@@ -469,9 +466,9 @@ const MyCourses = () => {
 
                             <div className="mb-4">
                               <div className="d-flex justify-content-between mb-2">
-                                <span className="small fw-semibold">Attendance Progress</span>
+                                <span className="small fw-semibold">{t('myCourses.attendanceProgress')}</span>
                                 <span className="small fw-bold" style={{ color: stat.percentage >= stat.threshold ? '#16a34a' : '#dc2626' }}>
-                                  {stat.percentage}% / {stat.threshold}% required
+                                  {stat.percentage}% / {stat.threshold}% {t('myCourses.required')}
                                 </span>
                               </div>
                               <div style={{ background: 'var(--bs-border-color)', borderRadius: '8px', height: '10px', overflow: 'hidden' }}>
@@ -482,14 +479,16 @@ const MyCourses = () => {
                                 }} />
                               </div>
                               {stat.percentage < stat.threshold && (
-                                <p className="small text-danger mt-1 mb-0">⚠ You need {stat.threshold - stat.percentage}% more to meet the threshold.</p>
+                                <p className="small text-danger mt-1 mb-0">
+                                  ⚠ {t('myCourses.needMore', { percent: stat.threshold - stat.percentage })}
+                                </p>
                               )}
                             </div>
 
                             <Row className="g-3">
                               <Col md={5} xs={12}>
                                 <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: '12px', padding: '16px' }}>
-                                  <p className="small fw-semibold mb-3">Session Breakdown</p>
+                                  <p className="small fw-semibold mb-3">{t('myCourses.sessionBreakdown')}</p>
                                   <ResponsiveContainer width="100%" height={160} style={{ outline: 'none' }}>
                                     <BarChart data={barData} barSize={40} style={{ outline: 'none' }}>
                                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -504,7 +503,7 @@ const MyCourses = () => {
                               </Col>
                               <Col md={7} xs={12}>
                                 <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: '12px', padding: '16px' }}>
-                                  <p className="small fw-semibold mb-3">Session History</p>
+                                  <p className="small fw-semibold mb-3">{t('myCourses.sessionHistory')}</p>
                                   {areaData.length > 0 ? (
                                     <ResponsiveContainer width="100%" height={160} style={{ outline: 'none' }}>
                                       <AreaChart data={areaData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }} style={{ outline: 'none' }}>
@@ -526,7 +525,7 @@ const MyCourses = () => {
                                         <Area
                                           type="monotone" dataKey="value"
                                           stroke="#dc2626" strokeWidth={2}
-                                          fill="url(#gradAtt)" name="Attendance"
+                                          fill="url(#gradAtt)" name={t('myCourses.attendancePct')}
                                           dot={(props) => {
                                             const { cx, cy, payload } = props;
                                             return <circle key={cx} cx={cx} cy={cy} r={5} fill={payload.attended ? '#16a34a' : '#dc2626'} stroke="#fff" strokeWidth={2} />;
@@ -537,12 +536,12 @@ const MyCourses = () => {
                                           type="monotone" dataKey="threshold"
                                           stroke="#f59e0b" strokeWidth={2}
                                           strokeDasharray="5 4" fill="url(#gradThr)"
-                                          name="Threshold %" dot={false}
+                                          name={t('myCourses.thresholdPct')} dot={false}
                                         />
                                       </AreaChart>
                                     </ResponsiveContainer>
                                   ) : (
-                                    <div className="text-center py-4 text-muted small">No session history yet.</div>
+                                    <div className="text-center py-4 text-muted small">{t('myCourses.noSessionHistory')}</div>
                                   )}
                                 </div>
                               </Col>
@@ -551,7 +550,7 @@ const MyCourses = () => {
                         ) : (
                           <div className="text-center py-5 text-muted">
                             <BookFill size={40} className="mb-3 opacity-50" />
-                            <p className="mb-0">No attendance data yet for this course.</p>
+                            <p className="mb-0">{t('myCourses.noAttendanceData')}</p>
                           </div>
                         )}
                       </Card.Body>
@@ -566,7 +565,7 @@ const MyCourses = () => {
 
       <Modal show={popup.show} onHide={() => setPopup({ show: false, message: '' })} centered>
         <Modal.Header closeButton>
-          <Modal.Title style={{ fontSize: '1rem' }}>Course Information</Modal.Title>
+          <Modal.Title style={{ fontSize: '1rem' }}>{t('myCourses.course')}</Modal.Title>
         </Modal.Header>
         <Modal.Body><p className="mb-0">{popup.message}</p></Modal.Body>
         <Modal.Footer>

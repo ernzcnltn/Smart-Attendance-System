@@ -4,6 +4,7 @@ const passport = require('../config/passport');
 const { login, getMe, searchStudents, googleCallback, completeGoogleRegistration, changePassword, forgotPassword, resetPassword ,bulkRegister} = require('../controllers/authController');
 const { authenticate, authorize } = require('../middleware/auth');
 
+
 router.post('/bulk-register', authenticate, authorize('admin'), bulkRegister);
 router.post('/login', login);
 router.get('/me', authenticate, getMe);

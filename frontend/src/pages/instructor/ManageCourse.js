@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Container, Row, Col, Card, Table, Button, Form, Modal, Alert, Spinner, Badge, InputGroup } from 'react-bootstrap';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { getCourseByUUID, getCourseStudents, enrollStudent } from '../../services/courseService';
 import { getAttendanceStats, sendLowAttendanceNotifications } from '../../services/attendanceService';
 import { exportExcel, exportPDF, exportSessionExcel, exportSessionPDF } from '../../services/exportService';
@@ -11,12 +12,14 @@ import { Download, Search, PencilFill, PlusCircleFill, TrashFill } from 'react-b
 
 const STUDENTS_PER_PAGE = 10;
 const SESSIONS_PER_PAGE = 10;
-
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const ManageCourse = () => {
   const { uuid } = useParams();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const localeMap = { tr: 'tr-TR', fr: 'fr-FR', ar: 'ar-SA', ru: 'ru-RU', en: 'en-GB' };
+  const locale = localeMap[i18n.language] || 'en-GB';
   const [course, setCourse] = useState(null);
   const [students, setStudents] = useState([]);
   const [stats, setStats] = useState(null);
@@ -52,13 +55,10 @@ const ManageCourse = () => {
         setStudents(s);
         setStats(st);
         setSessions(sess);
-
-        // Schedule'ı ayrıca çek
         try {
           const schRes = await api.get(`/timetable/schedule/${uuid}`);
           setSchedules(schRes.data.data || []);
         } catch { setSchedules([]); }
-
       } catch (err) {
         setError('Failed to load course data.');
       } finally {
@@ -109,7 +109,6 @@ const ManageCourse = () => {
       });
       setSuccess('Course updated successfully.');
       setShowEditModal(false);
-      // Refresh
       const [c] = await Promise.all([getCourseByUUID(uuid)]);
       setCourse(c);
       const schRes = await api.get(`/timetable/schedule/${uuid}`);
@@ -153,8 +152,8 @@ const ManageCourse = () => {
 
   const handleNotify = () => {
     showConfirm(
-      'Send Low Attendance Alerts',
-      'Send notifications to all students below the attendance threshold?',
+      t('instructor.manageCourse.sendAlerts'),
+      t('instructor.manageCourse.sendNotifyMsg'),
       async () => {
         try {
           const res = await sendLowAttendanceNotifications(uuid);
@@ -175,7 +174,7 @@ const ManageCourse = () => {
       formData.append('file', file);
       formData.append('course_uuid', uuid);
       const response = await api.post('/timetable/students', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setSuccess(`${response.data.data.enrolled} students enrolled. ${response.data.data.notFound} not found in system.`);
+      setSuccess(t('instructor.manageCourse.studentsEnrolled', { enrolled: response.data.data.enrolled, notFound: response.data.data.notFound }));
       setShowStudentUploadModal(false);
       const s = await getCourseStudents(uuid);
       setStudents(s);
@@ -203,7 +202,7 @@ const ManageCourse = () => {
     return (
       <div className="d-flex justify-content-between align-items-center py-2 px-3 border-top">
         <small className="text-muted">
-          Showing {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, totalItems)} of {totalItems}
+          {t('common.showing', { from: (currentPage - 1) * perPage + 1, to: Math.min(currentPage * perPage, totalItems), total: totalItems })}
         </small>
         <div className="d-flex gap-1 flex-wrap">
           <Button size="sm" variant="outline-secondary" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>&larr;</Button>
@@ -220,7 +219,7 @@ const ManageCourse = () => {
 
   return (
     <Container>
-      <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => navigate('/instructor')}>&larr; Back</Button>
+      <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => navigate('/instructor')}>&larr; {t('common.back')}</Button>
 
       {error && <Alert variant="danger" dismissible onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert variant="success" dismissible onClose={() => setSuccess('')}>{success}</Alert>}
@@ -231,19 +230,19 @@ const ManageCourse = () => {
           <div className="d-flex justify-content-between align-items-start">
             <div>
               <h5 className="mb-1">{course?.course_code} — {course?.course_name}</h5>
-              <p className="text-muted mb-0">{course?.semester} · Attendance threshold: {course?.attendance_threshold}%</p>
+              <p className="text-muted mb-0">{course?.semester} · {t('common.attendanceThreshold')}: {course?.attendance_threshold}%</p>
               {schedules.length > 0 && (
                 <div className="mt-2">
                   {schedules.map((s, i) => (
                     <Badge key={i} bg="secondary" className="me-1" style={{ fontSize: '12px' }}>
-                      {s.day}: {s.start_time?.substring(0, 5)} – {s.end_time?.substring(0, 5)}
+                      {t(`days.${s.day}`)}: {s.start_time?.substring(0, 5)} – {s.end_time?.substring(0, 5)}
                     </Badge>
                   ))}
                 </div>
               )}
             </div>
             <Button variant="outline-secondary" size="sm" onClick={openEditModal} className="d-flex align-items-center gap-1">
-              <PencilFill size={13} /> Edit
+              <PencilFill size={13} /> {t('common.edit')}
             </Button>
           </div>
         </Card.Body>
@@ -251,9 +250,9 @@ const ManageCourse = () => {
 
       <Row className="mb-4">
         {[
-          { label: 'Total Sessions', value: stats?.total_sessions || 0 },
-          { label: 'Students', value: students.length },
-          { label: 'At Risk', value: stats?.at_risk_count || 0 },
+          { label: t('common.totalSessions'), value: stats?.total_sessions || 0 },
+          { label: t('instructor.dashboard.totalStudents'), value: students.length },
+          { label: t('instructor.manageCourse.atRisk'), value: stats?.at_risk_count || 0 },
         ].map((item, i) => (
           <Col md={3} xs={4} key={i}>
             <Card className="text-center shadow-sm">
@@ -267,23 +266,23 @@ const ManageCourse = () => {
       </Row>
 
       <div className="d-flex flex-wrap gap-2 mb-4">
-        <Button variant="danger" onClick={() => setShowEnrollModal(true)}>+ Enroll Student</Button>
-        <Button variant="danger" onClick={() => setShowStudentUploadModal(true)}>Upload Student List</Button>
-        <Button variant="danger" onClick={handleNotify}>Send Low Attendance Alerts</Button>
-        <Button variant="danger" onClick={() => navigate(`/instructor/courses/${uuid}/qr`)}>Generate QR</Button>
-        <Button variant="secondary" onClick={() => exportExcel(uuid)}>Export Excel</Button>
-        <Button variant="secondary" onClick={() => exportPDF(uuid)}>Export PDF</Button>
+        <Button variant="danger" onClick={() => setShowEnrollModal(true)}>{t('instructor.manageCourse.enrollStudent')}</Button>
+        <Button variant="danger" onClick={() => setShowStudentUploadModal(true)}>{t('instructor.manageCourse.uploadStudentList')}</Button>
+        <Button variant="danger" onClick={handleNotify}>{t('instructor.manageCourse.sendAlerts')}</Button>
+        <Button variant="danger" onClick={() => navigate(`/instructor/courses/${uuid}/qr`)}>{t('instructor.manageCourse.generateQR')}</Button>
+        <Button variant="secondary" onClick={() => exportExcel(uuid)}>{t('instructor.manageCourse.exportExcel')}</Button>
+        <Button variant="secondary" onClick={() => exportPDF(uuid)}>{t('instructor.manageCourse.exportPDF')}</Button>
       </div>
 
       {/* Student Attendance */}
       <Card className="shadow-sm mb-4" style={{ borderRadius: '14px', overflow: 'hidden' }}>
         <Card.Header>
           <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-            <strong>Student Attendance</strong>
+            <strong>{t('instructor.manageCourse.studentAttendance')}</strong>
             <InputGroup style={{ maxWidth: '280px' }}>
               <InputGroup.Text style={{ background: 'transparent' }}><Search size={14} /></InputGroup.Text>
               <Form.Control
-                placeholder="Search by name or number..."
+                placeholder={t('instructor.manageCourse.searchByName')}
                 value={studentSearch}
                 onChange={e => { setStudentSearch(e.target.value); setStudentPage(1); }}
                 size="sm"
@@ -296,13 +295,20 @@ const ManageCourse = () => {
         </Card.Header>
         <Card.Body className="p-0">
           {filteredStudents.length === 0 ? (
-            <p className="text-muted p-3">{studentSearch ? 'No students match your search.' : 'No students enrolled.'}</p>
+            <p className="text-muted p-3">{studentSearch ? t('instructor.manageCourse.noMatch') : t('instructor.manageCourse.noStudents')}</p>
           ) : (
             <>
+              {/* Desktop Table */}
               <div className="d-none d-md-block">
                 <Table hover className="mb-0">
                   <thead className="table-dark">
-                    <tr><th>Student</th><th>Student No</th><th>Attended</th><th>Percentage</th><th>Status</th></tr>
+                    <tr>
+                      <th>{t('instructor.manageCourse.student')}</th>
+                      <th>{t('instructor.manageCourse.studentNo')}</th>
+                      <th>{t('instructor.manageCourse.attended')}</th>
+                      <th>{t('instructor.manageCourse.percentage')}</th>
+                      <th>{t('common.status')}</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {paginatedStudents.map((s, i) => (
@@ -311,12 +317,17 @@ const ManageCourse = () => {
                         <td>{s.student_number}</td>
                         <td>{s.attended} / {s.total_sessions}</td>
                         <td>{s.percentage}%</td>
-                        <td><Badge bg={s.percentage >= stats.threshold ? 'success' : 'danger'}>{s.percentage >= stats.threshold ? 'OK' : 'At Risk'}</Badge></td>
+                        <td>
+                          <Badge bg={s.percentage >= stats.threshold ? 'success' : 'danger'}>
+                            {s.percentage >= stats.threshold ? t('instructor.manageCourse.ok') : t('instructor.manageCourse.atRisk')}
+                          </Badge>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </Table>
               </div>
+              {/* Mobile Cards */}
               <div className="d-md-none p-3">
                 {paginatedStudents.map((s, i) => (
                   <Card key={i} className="shadow-sm border-0 mb-3" style={{ borderRadius: '10px' }}>
@@ -326,12 +337,20 @@ const ManageCourse = () => {
                           <strong>{s.full_name}</strong>
                           <div className="text-muted small">{s.student_number}</div>
                         </div>
-                        <Badge bg={s.percentage >= stats.threshold ? 'success' : 'danger'}>{s.percentage >= stats.threshold ? 'OK' : 'At Risk'}</Badge>
+                        <Badge bg={s.percentage >= stats.threshold ? 'success' : 'danger'}>
+                          {s.percentage >= stats.threshold ? t('instructor.manageCourse.ok') : t('instructor.manageCourse.atRisk')}
+                        </Badge>
                       </div>
                       <hr className="my-2" />
                       <div style={{ fontSize: '0.82rem' }}>
-                        <div className="d-flex justify-content-between mb-1"><span className="text-muted">Attended</span><span>{s.attended} / {s.total_sessions}</span></div>
-                        <div className="d-flex justify-content-between"><span className="text-muted">Percentage</span><span style={{ fontWeight: 600, color: s.percentage >= stats.threshold ? '#16a34a' : '#dc2626' }}>{s.percentage}%</span></div>
+                        <div className="d-flex justify-content-between mb-1">
+                          <span className="text-muted">{t('instructor.manageCourse.attended')}</span>
+                          <span>{s.attended} / {s.total_sessions}</span>
+                        </div>
+                        <div className="d-flex justify-content-between">
+                          <span className="text-muted">{t('instructor.manageCourse.percentage')}</span>
+                          <span style={{ fontWeight: 600, color: s.percentage >= stats.threshold ? '#16a34a' : '#dc2626' }}>{s.percentage}%</span>
+                        </div>
                       </div>
                     </Card.Body>
                   </Card>
@@ -345,23 +364,29 @@ const ManageCourse = () => {
 
       {/* Sessions */}
       <Card className="shadow-sm mb-4" style={{ borderRadius: '14px', overflow: 'hidden' }}>
-        <Card.Header><strong>Sessions</strong></Card.Header>
+        <Card.Header><strong>{t('instructor.manageCourse.sessions')}</strong></Card.Header>
         <Card.Body className="p-0">
           {sessions.length === 0 ? (
-            <p className="text-muted p-3">No sessions found.</p>
+            <p className="text-muted p-3">{t('instructor.manageCourse.noSessions')}</p>
           ) : (
             <>
+              {/* Desktop Table */}
               <div className="d-none d-md-block">
                 <Table hover className="mb-0">
                   <thead className="table-dark">
-                    <tr><th>Date</th><th>Time</th><th>Attendance</th><th>Actions</th></tr>
+                    <tr>
+                      <th>{t('myAttendance.date')}</th>
+                      <th>{t('myAttendance.time')}</th>
+                      <th>{t('instructor.manageCourse.attendance')}</th>
+                      <th>{t('common.actions')}</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {paginatedSessions.map((s, i) => (
                       <tr key={i}>
-                        <td>{new Date(s.session_date).toLocaleDateString('en-GB')}</td>
+                        <td>{new Date(s.session_date).toLocaleDateString(locale)}</td>
                         <td>{s.start_time} – {s.end_time}</td>
-                        <td>{s.attendance_count} students</td>
+                        <td>{s.attendance_count} {t('instructor.manageCourse.sessionStudents')}</td>
                         <td>
                           <div className="d-flex gap-1">
                             <Button size="sm" variant="outline-secondary" onClick={() => exportSessionExcel(s.uuid)}>Excel</Button>
@@ -373,16 +398,17 @@ const ManageCourse = () => {
                   </tbody>
                 </Table>
               </div>
+              {/* Mobile Cards */}
               <div className="d-md-none p-3">
                 {paginatedSessions.map((s, i) => (
                   <Card key={i} className="shadow-sm border-0 mb-3" style={{ borderRadius: '10px' }}>
                     <Card.Body className="p-3">
                       <div className="d-flex justify-content-between align-items-start mb-2">
                         <div>
-                          <strong>{new Date(s.session_date).toLocaleDateString('en-GB')}</strong>
+                          <strong>{new Date(s.session_date).toLocaleDateString(locale)}</strong>
                           <div className="text-muted small">{s.start_time} – {s.end_time}</div>
                         </div>
-                        <Badge bg="secondary">{s.attendance_count} students</Badge>
+<Badge bg="secondary">{s.attendance_count} {t('instructor.manageCourse.sessionStudents')}</Badge>
                       </div>
                       <hr className="my-2" />
                       <div className="d-flex gap-2">
@@ -402,97 +428,59 @@ const ManageCourse = () => {
       {/* Edit Course Modal */}
       <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Edit Course — {course?.course_code}</Modal.Title>
+          <Modal.Title>{t('instructor.manageCourse.editCourse')} — {course?.course_code}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Form onSubmit={handleEditSubmit}>
             <Row className="g-3 mb-4">
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label className="fw-semibold small">Course Code</Form.Label>
-                  <Form.Control
-                    value={editForm.course_code}
-                    onChange={e => setEditForm({ ...editForm, course_code: e.target.value })}
-                    required
-                  />
+                  <Form.Label className="fw-semibold small">{t('instructor.manageCourse.courseCode')}</Form.Label>
+                  <Form.Control value={editForm.course_code} onChange={e => setEditForm({ ...editForm, course_code: e.target.value })} required />
                 </Form.Group>
               </Col>
               <Col md={8}>
                 <Form.Group>
-                  <Form.Label className="fw-semibold small">Course Name</Form.Label>
-                  <Form.Control
-                    value={editForm.course_name}
-                    onChange={e => setEditForm({ ...editForm, course_name: e.target.value })}
-                    required
-                  />
+                  <Form.Label className="fw-semibold small">{t('instructor.manageCourse.courseName')}</Form.Label>
+                  <Form.Control value={editForm.course_name} onChange={e => setEditForm({ ...editForm, course_name: e.target.value })} required />
                 </Form.Group>
               </Col>
               <Col md={8}>
                 <Form.Group>
-                  <Form.Label className="fw-semibold small">Semester</Form.Label>
-                  <Form.Control
-                    value={editForm.semester}
-                    onChange={e => setEditForm({ ...editForm, semester: e.target.value })}
-                    placeholder="e.g. 2025-2026 Spring"
-                    required
-                  />
+                  <Form.Label className="fw-semibold small">{t('instructor.manageCourse.semester')}</Form.Label>
+                  <Form.Control value={editForm.semester} onChange={e => setEditForm({ ...editForm, semester: e.target.value })} placeholder="e.g. 2025-2026 Spring" required />
                 </Form.Group>
               </Col>
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label className="fw-semibold small">Attendance Threshold (%)</Form.Label>
-                  <Form.Control
-                    type="number"
-                    min={0} max={100}
-                    value={editForm.attendance_threshold}
-                    onChange={e => setEditForm({ ...editForm, attendance_threshold: e.target.value })}
-                    required
-                  />
+                  <Form.Label className="fw-semibold small">{t('instructor.manageCourse.threshold')}</Form.Label>
+                  <Form.Control type="number" min={0} max={100} value={editForm.attendance_threshold} onChange={e => setEditForm({ ...editForm, attendance_threshold: e.target.value })} required />
                 </Form.Group>
               </Col>
             </Row>
 
             <div className="mb-3">
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <Form.Label className="fw-semibold small mb-0">Schedule</Form.Label>
+                <Form.Label className="fw-semibold small mb-0">{t('instructor.manageCourse.schedule')}</Form.Label>
                 <Button size="sm" variant="outline-danger" onClick={addScheduleRow} className="d-flex align-items-center gap-1">
-                  <PlusCircleFill size={13} /> Add Day
+                  <PlusCircleFill size={13} /> {t('instructor.manageCourse.addDay')}
                 </Button>
               </div>
               {editForm.schedules.map((sch, i) => (
                 <Row key={i} className="g-2 mb-2 align-items-center">
                   <Col xs={5} md={4}>
-                    <Form.Select
-                      value={sch.day}
-                      onChange={e => handleEditScheduleChange(i, 'day', e.target.value)}
-                      size="sm"
-                    >
-                      {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                    <Form.Select value={sch.day} onChange={e => handleEditScheduleChange(i, 'day', e.target.value)} size="sm">
+                      {DAYS.map(d => <option key={d} value={d}>{t(`days.${d}`)}</option>)}
                     </Form.Select>
                   </Col>
                   <Col xs={3} md={3}>
-                    <Form.Control
-                      type="time"
-                      size="sm"
-                      value={sch.start_time}
-                      onChange={e => handleEditScheduleChange(i, 'start_time', e.target.value)}
-                    />
+                    <Form.Control type="time" size="sm" value={sch.start_time} onChange={e => handleEditScheduleChange(i, 'start_time', e.target.value)} />
                   </Col>
                   <Col xs={3} md={3}>
-                    <Form.Control
-                      type="time"
-                      size="sm"
-                      value={sch.end_time}
-                      onChange={e => handleEditScheduleChange(i, 'end_time', e.target.value)}
-                    />
+                    <Form.Control type="time" size="sm" value={sch.end_time} onChange={e => handleEditScheduleChange(i, 'end_time', e.target.value)} />
                   </Col>
                   <Col xs={1} md={2}>
-                    <Button
-                      size="sm"
-                      variant="outline-danger"
-                      onClick={() => removeScheduleRow(i)}
-                      disabled={editForm.schedules.length === 1}
-                    >
+                    <Button size="sm" variant="outline-danger" onClick={() => removeScheduleRow(i)} disabled={editForm.schedules.length === 1}>
                       <TrashFill size={12} />
                     </Button>
                   </Col>
@@ -501,9 +489,9 @@ const ManageCourse = () => {
             </div>
 
             <div className="d-flex justify-content-end gap-2 mt-4">
-              <Button variant="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>
+              <Button variant="secondary" onClick={() => setShowEditModal(false)}>{t('common.cancel')}</Button>
               <Button type="submit" variant="danger" disabled={editLoading}>
-                {editLoading ? <><Spinner size="sm" className="me-1" />Saving...</> : 'Save Changes'}
+                {editLoading ? <><Spinner size="sm" className="me-1" />{t('instructor.manageCourse.saving')}</> : t('instructor.manageCourse.saveChanges')}
               </Button>
             </div>
           </Form>
@@ -512,13 +500,13 @@ const ManageCourse = () => {
 
       {/* Enroll Student Modal */}
       <Modal show={showEnrollModal} onHide={() => { setShowEnrollModal(false); setStudentUUID(''); setSearchResults([]); }}>
-        <Modal.Header closeButton><Modal.Title>Enroll Student</Modal.Title></Modal.Header>
+        <Modal.Header closeButton><Modal.Title>{t('instructor.manageCourse.enrollStudent')}</Modal.Title></Modal.Header>
         <Modal.Body>
           <Form onSubmit={handleEnroll}>
             <Form.Group className="mb-3">
-              <Form.Label>Search Student</Form.Label>
+              <Form.Label>{t('instructor.manageCourse.searchStudentLabel')}</Form.Label>
               <Form.Control
-                placeholder="Search by name, email or student number"
+                placeholder={t('instructor.manageCourse.searchStudentPlaceholder')}
                 onChange={async (e) => {
                   const q = e.target.value;
                   if (q.length > 2) {
@@ -539,31 +527,31 @@ const ManageCourse = () => {
                 ))}
               </div>
             )}
-            {studentUUID && <p className="small text-success">✓ Student selected.</p>}
-            <Button type="submit" variant="danger" className="w-100" disabled={!studentUUID}>Enroll</Button>
+{studentUUID && <p className="small text-success">✓ {t('instructor.manageCourse.studentSelected')}</p>}
+<Button type="submit" variant="danger" className="w-100" disabled={!studentUUID}>{t('instructor.manageCourse.enrollBtn')}</Button>
           </Form>
         </Modal.Body>
       </Modal>
 
       {/* Upload Student List Modal */}
       <Modal show={showStudentUploadModal} onHide={() => setShowStudentUploadModal(false)} centered>
-        <Modal.Header closeButton><Modal.Title>Upload Student List</Modal.Title></Modal.Header>
+        <Modal.Header closeButton><Modal.Title>{t('instructor.manageCourse.uploadStudentList')}</Modal.Title></Modal.Header>
         <Modal.Body>
           <Alert variant="danger" className="small">
-            Excel file must contain a <strong>student_number</strong> column.
+            {t('instructor.manageCourse.excelMustContain')}
           </Alert>
           <Button variant="outline-secondary" size="sm" className="mb-3 d-flex align-items-center gap-1" onClick={downloadStudentTemplate}>
-            <Download size={14} /> Download Template
+            <Download size={14} /> {t('common.download')}
           </Button>
           <Form.Group>
-            <Form.Label>Select Excel File (.xlsx)</Form.Label>
+            <Form.Label>{t('common.selectExcelFile')}</Form.Label>
             <Form.Control type="file" accept=".xlsx,.xls" ref={studentFileRef} />
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowStudentUploadModal(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => setShowStudentUploadModal(false)}>{t('common.cancel')}</Button>
           <Button variant="danger" onClick={handleStudentUpload} disabled={uploadLoading}>
-            {uploadLoading ? <Spinner size="sm" /> : 'Upload'}
+            {uploadLoading ? <Spinner size="sm" /> : t('common.upload')}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -573,8 +561,8 @@ const ManageCourse = () => {
         <Modal.Header closeButton><Modal.Title>{confirmModal.title}</Modal.Title></Modal.Header>
         <Modal.Body><p>{confirmModal.message}</p></Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setConfirmModal({ ...confirmModal, show: false })}>Cancel</Button>
-          <Button variant="danger" onClick={handleConfirm}>Confirm</Button>
+          <Button variant="secondary" onClick={() => setConfirmModal({ ...confirmModal, show: false })}>{t('common.cancel')}</Button>
+          <Button variant="danger" onClick={handleConfirm}>{t('common.confirm')}</Button>
         </Modal.Footer>
       </Modal>
     </Container>

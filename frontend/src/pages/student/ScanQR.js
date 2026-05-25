@@ -1,26 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Container, Card, Button, Alert, Spinner } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Html5Qrcode } from 'html5-qrcode';
 import api from '../../services/api';
-
-const SCHOOL_LAT = parseFloat(process.env.REACT_APP_SCHOOL_LAT);
-const SCHOOL_LNG = parseFloat(process.env.REACT_APP_SCHOOL_LNG);
-const SCHOOL_RADIUS = parseFloat(process.env.REACT_APP_SCHOOL_RADIUS) || 150;
-
-const getDistanceMeters = (lat1, lng1, lat2, lng2) => {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
+import { getErrorMessage } from '../../utils/errorCodes';
 
 const ScanQR = ({ expectedCourseUUID }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -28,7 +16,7 @@ const ScanQR = ({ expectedCourseUUID }) => {
   const [location, setLocation] = useState(null);
   const [locationError, setLocationError] = useState('');
   const [gettingLocation, setGettingLocation] = useState(false);
-  const [locationVerified, setLocationVerified] = useState(false);
+  const [locationReady, setLocationReady] = useState(false);
   const scannerRef = useRef(null);
 
   useEffect(() => {
@@ -47,29 +35,21 @@ const ScanQR = ({ expectedCourseUUID }) => {
   const getLocation = () => {
     setGettingLocation(true);
     setLocationError('');
-    setLocationVerified(false);
+    setLocationReady(false);
+    setLocation(null);
     if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser.');
+      setLocationError(t('scanQR.locationDenied'));
       setGettingLocation(false);
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setLocation({ latitude: lat, longitude: lng });
+        setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        setLocationReady(true);
         setGettingLocation(false);
-
-        const distance = getDistanceMeters(SCHOOL_LAT, SCHOOL_LNG, lat, lng);
-        if (distance > SCHOOL_RADIUS) {
-  setLocationError(`You must be within ${SCHOOL_RADIUS} meters of the school. Current distance: ${Math.round(distance)}m.`);
-  setLocationVerified(false);
-} else {
-  setLocationVerified(true);
-}
       },
-      (err) => {
-        setLocationError('Location access denied. Please allow location permission.');
+      () => {
+        setLocationError(t('scanQR.locationDenied'));
         setGettingLocation(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -77,10 +57,6 @@ const ScanQR = ({ expectedCourseUUID }) => {
   };
 
   const startScanner = async () => {
-    if (!locationVerified) {
-      setError('You must be at school to mark attendance.');
-      return;
-    }
     setError('');
     setScanning(true);
 
@@ -96,30 +72,26 @@ const ScanQR = ({ expectedCourseUUID }) => {
           setScanning(false);
           try {
             const parsed = JSON.parse(decodedText);
-           const response = await api.post('/sessions/attend', {
-  session_uuid: parsed.session_uuid,
-  qr_token: parsed.qr_token,
-  latitude: location.latitude,
-  longitude: location.longitude,
-  expected_course_uuid: expectedCourseUUID || null
-});
-const courseCode = response.data?.data?.course_code || '';
-const courseName = response.data?.data?.course_name || '';
-if (courseCode) {
-  setSuccess(`Attendance marked for ${courseCode} - ${courseName}`);
-} else {
-  setSuccess('Attendance marked successfully!');
-}
-setDone(true);
+            const response = await api.post('/sessions/attend', {
+              session_uuid: parsed.session_uuid,
+              qr_token: parsed.qr_token,
+              latitude: location?.latitude || 0,
+              longitude: location?.longitude || 0,
+              expected_course_uuid: expectedCourseUUID || null
+            });
+            const courseCode = response.data?.data?.course_code || '';
+            const courseName = response.data?.data?.course_name || '';
+            setSuccess(courseCode ? t('scanQR.attendanceMarked', { code: courseCode, name: courseName }) : t('scanQR.attendanceMarkedSuccess'));
+            setDone(true);
           } catch (err) {
-            setError(err.response?.data?.message || 'Invalid QR code or attendance already marked.');
+            setError(getErrorMessage(err, t));
           }
         },
         () => {}
       );
     } catch (err) {
       setScanning(false);
-      setError('Camera access denied. Please allow camera permission.');
+      setError(t('faceAttendance.cameraError'));
     }
   };
 
@@ -137,33 +109,29 @@ setDone(true);
   return (
     <Container>
       <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => { stopScanner(); navigate('/student'); }}>
-        ← Back
+        ← {t('common.back')}
       </Button>
       <Card className="shadow-sm mx-auto" style={{ maxWidth: '500px' }}>
-        <Card.Header><strong>Scan QR Code</strong></Card.Header>
+        <Card.Header><strong>{t('scanQR.title')}</strong></Card.Header>
         <Card.Body className="text-center">
           {error && <Alert variant="danger">{error}</Alert>}
           {success && <Alert variant="success">{success}</Alert>}
 
           {gettingLocation && (
-            <Alert variant="info">
+            <Alert variant="info" className="small">
               <Spinner size="sm" className="me-2" />
-              Getting your location...
+              {t('scanQR.gettingLocation')}
             </Alert>
           )}
-
           {locationError && (
-            <Alert variant="danger">
+            <Alert variant="warning" className="small">
               {locationError}
-              <div>
-                <Button variant="link" size="sm" onClick={getLocation}>Try again</Button>
-              </div>
+              <div><Button variant="link" size="sm" className="p-0 mt-1" onClick={getLocation}>{t('scanQR.tryAgain')}</Button></div>
             </Alert>
           )}
-
-          {locationVerified && (
+          {locationReady && (
             <Alert variant="success" className="small">
-              Location verified. You are at school.
+              ✓ {t('scanQR.locationReady')}
             </Alert>
           )}
 
@@ -175,15 +143,13 @@ setDone(true);
                   variant="primary"
                   className="mt-3 w-100"
                   onClick={startScanner}
-                  disabled={!locationVerified || gettingLocation}
+                  disabled={gettingLocation}
                 >
-                  {!locationVerified && !gettingLocation && !locationError
-                    ? 'Waiting for location...'
-                    : 'Start Camera & Scan'}
+                  {gettingLocation ? t('scanQR.gettingLocation') : t('scanQR.startScan')}
                 </Button>
               ) : (
                 <Button variant="danger" className="mt-3 w-100" onClick={stopScanner}>
-                  Stop Scanner
+                  {t('scanQR.stopScan')}
                 </Button>
               )}
             </>
@@ -191,7 +157,7 @@ setDone(true);
 
           {done && (
             <Button variant="success" className="mt-3 w-100" onClick={() => navigate('/student')}>
-              Go to Dashboard
+              {t('scanQR.goDashboard')}
             </Button>
           )}
         </Card.Body>
