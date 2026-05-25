@@ -11,7 +11,6 @@ import { useAuth } from '../../context/AuthContext';
 const SecurityModal = ({ modalType, onClose }) => {
   const { t } = useTranslation();
   if (!modalType) return null;
-
   const MODALS = {
     spoof: { title: t('faceAttendance.modals.spoof.title'), iconClass: 'bi bi-shield-x', heading: t('faceAttendance.modals.spoof.heading'), body: t('faceAttendance.modals.spoof.body'), tips: t('faceAttendance.modals.spoof.tips', { returnObjects: true }), color: '#dc2626' },
     multiple_faces: { title: t('faceAttendance.modals.multiple_faces.title'), iconClass: 'bi bi-people-fill', heading: t('faceAttendance.modals.multiple_faces.heading'), body: t('faceAttendance.modals.multiple_faces.body'), tips: t('faceAttendance.modals.multiple_faces.tips', { returnObjects: true }), color: '#dc2626' },
@@ -19,7 +18,6 @@ const SecurityModal = ({ modalType, onClose }) => {
     wrong_person: { title: t('faceAttendance.modals.wrong_person.title'), iconClass: 'bi bi-person-fill-x', heading: t('faceAttendance.modals.wrong_person.heading'), body: t('faceAttendance.modals.wrong_person.body'), tips: t('faceAttendance.modals.wrong_person.tips', { returnObjects: true }), color: '#dc2626' },
     too_slow: { title: t('faceAttendance.modals.too_slow.title'), iconClass: 'bi bi-clock-history', heading: t('faceAttendance.modals.too_slow.heading'), body: t('faceAttendance.modals.too_slow.body'), tips: t('faceAttendance.modals.too_slow.tips', { returnObjects: true }), color: '#dc2626' },
   };
-
   const config = MODALS[modalType];
   if (!config) return null;
   return (
@@ -56,18 +54,20 @@ const FaceAttendance = () => {
   const [challengePhase, setChallengePhase] = useState(1);
   const [challenge1, setChallenge1] = useState(null);
   const [challenge2, setChallenge2] = useState(null);
-  const [challenge1Image, setChallenge1Image] = useState(null);
-  const [challenge1Time, setChallenge1Time] = useState(null);
   const [detected, setDetected] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [loadingChallenge, setLoadingChallenge] = useState(true);
   const [statusText, setStatusText] = useState('');
   const [activeModal, setActiveModal] = useState(null);
+
   const intervalRef = useRef(null);
   const livenessFramesRef = useRef([]);
   const challengePhaseRef = useRef(1);
   const challenge1Ref = useRef(null);
   const challenge2Ref = useRef(null);
+  const challenge1ImageRef = useRef(null);
+  const challenge1TimeRef = useRef(null);
+  const capturingRef = useRef(false);
 
   useEffect(() => { fetchFirstChallenge(); return () => stopDetection(); }, []);
   useEffect(() => {
@@ -79,9 +79,11 @@ const FaceAttendance = () => {
   const fetchFirstChallenge = async () => {
     setLoadingChallenge(true); setDetected(false); setError('');
     challengePhaseRef.current = 1;
+    capturingRef.current = false;
     setChallengePhase(1); setChallenge1(null); setChallenge2(null);
     challenge1Ref.current = null; challenge2Ref.current = null;
-    setChallenge1Image(null); setChallenge1Time(null); setStatusText('');
+    challenge1ImageRef.current = null; challenge1TimeRef.current = null;
+    setCapturing(false); setStatusText('');
     livenessFramesRef.current = []; stopDetection();
     try {
       const response = await api.get('/face/challenge?type=verification');
@@ -96,21 +98,23 @@ const FaceAttendance = () => {
     try {
       const response = await api.get(`/face/challenge?type=verification&exclude=${excludeId}`);
       challenge2Ref.current = response.data.data.challenge;
-      setChallenge2(response.data.data.challenge);
       challengePhaseRef.current = 2;
-      setChallengePhase(2); setStatusText('');
+      setChallenge2(response.data.data.challenge);
+      setChallengePhase(2);
+      setStatusText('');
     } catch { setError('Failed to load second challenge.'); }
   };
 
   const startDetection = () => {
     stopDetection();
     intervalRef.current = setInterval(async () => {
-      if (!webcamRef.current || capturing) return;
+      if (!webcamRef.current || capturingRef.current) return;
       try {
         const imageSrc = webcamRef.current.getScreenshot();
         if (!imageSrc) return;
         const currentChallenge = challengePhaseRef.current === 1 ? challenge1Ref.current : challenge2Ref.current;
         if (!currentChallenge) return;
+
         if (livenessFramesRef.current.length < 10) livenessFramesRef.current.push(imageSrc);
         else { livenessFramesRef.current.shift(); livenessFramesRef.current.push(imageSrc); }
 
@@ -121,19 +125,28 @@ const FaceAttendance = () => {
         if (response.detected) {
           stopDetection(); setDetected(true);
           if (challengePhaseRef.current === 1) {
-            setChallenge1Image(imageSrc); setChallenge1Time(Date.now());
+            challenge1ImageRef.current = imageSrc;
+            challenge1TimeRef.current = Date.now();
             setStatusText(t('faceAttendance.firstPassed'));
             await new Promise(r => setTimeout(r, 500));
-            setDetected(false); await fetchSecondChallenge(currentChallenge.id);
+            setDetected(false);
+            await fetchSecondChallenge(currentChallenge.id);
           } else {
-            setCapturing(true); setStatusText(t('faceAttendance.verifying'));
+            capturingRef.current = true;
+            setCapturing(true);
+            setStatusText(t('faceAttendance.verifying'));
             const finalFrames = [];
-            for (let i = 0; i < 3; i++) { await new Promise(r => setTimeout(r, 400)); const frame = webcamRef.current?.getScreenshot(); if (frame) finalFrames.push(frame); }
+            for (let i = 0; i < 3; i++) {
+              await new Promise(r => setTimeout(r, 400));
+              const frame = webcamRef.current?.getScreenshot();
+              if (frame) finalFrames.push(frame);
+            }
             const allFrames = [...livenessFramesRef.current, ...finalFrames];
             const selectedFrames = allFrames.length >= 6
               ? [allFrames[0], allFrames[Math.floor(allFrames.length / 2)], allFrames[allFrames.length - 1]]
               : allFrames.slice(-3);
             await handleVerify(imageSrc, selectedFrames);
+            capturingRef.current = false;
             setCapturing(false);
           }
         }
@@ -141,14 +154,16 @@ const FaceAttendance = () => {
     }, 1500);
   };
 
-  const stopDetection = () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
+  const stopDetection = () => {
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+  };
 
   const handleVerify = async (secondImage, livenessFrames) => {
     setLoading(true); setError('');
     try {
       const response = await api.post('/face/verify', {
         challenges: [
-          { id: challenge1Ref.current.id, image: challenge1Image, timestamp: challenge1Time },
+          { id: challenge1Ref.current.id, image: challenge1ImageRef.current, timestamp: challenge1TimeRef.current },
           { id: challenge2Ref.current.id, image: secondImage, timestamp: Date.now() }
         ],
         liveness_frames: livenessFrames
@@ -161,11 +176,15 @@ const FaceAttendance = () => {
       else if (msg.includes('spoof') || msg.includes('screen') || msg.includes('liveness') || msg.includes('photo')) { stopDetection(); setActiveModal('spoof'); }
       else if (msg.includes('does not match')) { stopDetection(); setActiveModal('mismatch'); }
       else if (msg.includes('too slow')) { stopDetection(); setActiveModal('too_slow'); }
-      else { setError(err.response?.data?.message || 'Face verification failed.'); setDetected(false); setCapturing(false); await fetchFirstChallenge(); }
+      else { setError(err.response?.data?.message || 'Face verification failed.'); setDetected(false); capturingRef.current = false; setCapturing(false); await fetchFirstChallenge(); }
     } finally { setLoading(false); }
   };
 
-  const handleCloseModal = async () => { setActiveModal(null); setDetected(false); setCapturing(false); await fetchFirstChallenge(); };
+  const handleCloseModal = async () => {
+    setActiveModal(null); setDetected(false);
+    capturingRef.current = false; setCapturing(false);
+    await fetchFirstChallenge();
+  };
 
   if (step === 'qr') {
     return (
