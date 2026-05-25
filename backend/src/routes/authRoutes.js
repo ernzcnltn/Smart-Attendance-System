@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const passport = require('../config/passport');
-const { login, getMe, searchStudents, googleCallback, completeGoogleRegistration, changePassword, forgotPassword, resetPassword ,bulkRegister} = require('../controllers/authController');
+const { login, getMe, searchStudents, completeGoogleRegistration, changePassword, forgotPassword, resetPassword, bulkRegister, register } = require('../controllers/authController');
 const { authenticate, authorize } = require('../middleware/auth');
 
-
-router.post('/register', authenticate, authorize('admin'), bulkRegister);
+router.post('/register', authenticate, authorize('admin'), register);
+router.post('/bulk-register', authenticate, authorize('admin'), bulkRegister);
 router.post('/login', login);
 router.get('/me', authenticate, getMe);
 router.get('/students/search', authenticate, authorize('instructor', 'admin'), searchStudents);
@@ -42,7 +42,5 @@ router.get('/google/callback',
     })(req, res, next);
   }
 );
-
-
 
 module.exports = router;
