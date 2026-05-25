@@ -65,21 +65,27 @@ const FaceAttendance = () => {
   const [activeModal, setActiveModal] = useState(null);
   const intervalRef = useRef(null);
   const livenessFramesRef = useRef([]);
+  const challengePhaseRef = useRef(1);
+  const challenge1Ref = useRef(null);
+  const challenge2Ref = useRef(null);
 
   useEffect(() => { fetchFirstChallenge(); return () => stopDetection(); }, []);
   useEffect(() => {
-    const currentChallenge = challengePhase === 1 ? challenge1 : challenge2;
+    const currentChallenge = challengePhaseRef.current === 1 ? challenge1Ref.current : challenge2Ref.current;
     if (currentChallenge && !detected && !loading) startDetection();
     return () => stopDetection();
   }, [challenge1, challenge2, challengePhase]);
 
   const fetchFirstChallenge = async () => {
     setLoadingChallenge(true); setDetected(false); setError('');
+    challengePhaseRef.current = 1;
     setChallengePhase(1); setChallenge1(null); setChallenge2(null);
+    challenge1Ref.current = null; challenge2Ref.current = null;
     setChallenge1Image(null); setChallenge1Time(null); setStatusText('');
     livenessFramesRef.current = []; stopDetection();
     try {
       const response = await api.get('/face/challenge?type=verification');
+      challenge1Ref.current = response.data.data.challenge;
       setChallenge1(response.data.data.challenge);
     } catch { setError('Failed to load challenge.'); }
     finally { setLoadingChallenge(false); }
@@ -89,7 +95,10 @@ const FaceAttendance = () => {
     setDetected(false); setStatusText(t('faceAttendance.firstPassed'));
     try {
       const response = await api.get(`/face/challenge?type=verification&exclude=${excludeId}`);
-      setChallenge2(response.data.data.challenge); setChallengePhase(2); setStatusText('');
+      challenge2Ref.current = response.data.data.challenge;
+      setChallenge2(response.data.data.challenge);
+      challengePhaseRef.current = 2;
+      setChallengePhase(2); setStatusText('');
     } catch { setError('Failed to load second challenge.'); }
   };
 
@@ -100,7 +109,7 @@ const FaceAttendance = () => {
       try {
         const imageSrc = webcamRef.current.getScreenshot();
         if (!imageSrc) return;
-        const currentChallenge = challengePhase === 1 ? challenge1 : challenge2;
+        const currentChallenge = challengePhaseRef.current === 1 ? challenge1Ref.current : challenge2Ref.current;
         if (!currentChallenge) return;
         if (livenessFramesRef.current.length < 10) livenessFramesRef.current.push(imageSrc);
         else { livenessFramesRef.current.shift(); livenessFramesRef.current.push(imageSrc); }
@@ -111,7 +120,7 @@ const FaceAttendance = () => {
         if (response.wrong_person) { stopDetection(); setActiveModal('wrong_person'); return; }
         if (response.detected) {
           stopDetection(); setDetected(true);
-          if (challengePhase === 1) {
+          if (challengePhaseRef.current === 1) {
             setChallenge1Image(imageSrc); setChallenge1Time(Date.now());
             setStatusText(t('faceAttendance.firstPassed'));
             await new Promise(r => setTimeout(r, 500));
@@ -139,8 +148,8 @@ const FaceAttendance = () => {
     try {
       const response = await api.post('/face/verify', {
         challenges: [
-          { id: challenge1.id, image: challenge1Image, timestamp: challenge1Time },
-          { id: challenge2.id, image: secondImage, timestamp: Date.now() }
+          { id: challenge1Ref.current.id, image: challenge1Image, timestamp: challenge1Time },
+          { id: challenge2Ref.current.id, image: secondImage, timestamp: Date.now() }
         ],
         liveness_frames: livenessFrames
       });
