@@ -5,7 +5,7 @@ const { login, getMe, searchStudents, googleCallback, completeGoogleRegistration
 const { authenticate, authorize } = require('../middleware/auth');
 
 
-router.post('/bulk-register', authenticate, authorize('admin'), bulkRegister);
+router.post('/register', authenticate, authorize('admin'), bulkRegister);
 router.post('/login', login);
 router.get('/me', authenticate, getMe);
 router.get('/students/search', authenticate, authorize('instructor', 'admin'), searchStudents);
