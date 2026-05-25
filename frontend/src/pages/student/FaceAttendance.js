@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Container, Card, Button, Alert, Spinner, Modal, Badge } from 'react-bootstrap';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -48,152 +48,169 @@ const FaceAttendance = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const webcamRef = useRef(null);
+
+  // UI state — sadece render için
   const [step, setStep] = useState('face');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [challengePhase, setChallengePhase] = useState(1);
-  const [challenge1, setChallenge1] = useState(null);
-  const [challenge2, setChallenge2] = useState(null);
-  const [detected, setDetected] = useState(false);
-  const [capturing, setCapturing] = useState(false);
+  const [uiPhase, setUiPhase] = useState(1);
+  const [uiChallenge, setUiChallenge] = useState(null);
+  const [uiStatus, setUiStatus] = useState('detecting'); // 'detecting' | 'passed1' | 'verifying'
   const [loadingChallenge, setLoadingChallenge] = useState(true);
-  const [statusText, setStatusText] = useState('');
+  const [error, setError] = useState('');
   const [activeModal, setActiveModal] = useState(null);
 
+  // Tüm mantık ref'lerde
+  const stateRef = useRef({
+    phase: 1,
+    challenge1: null,
+    challenge2: null,
+    challenge1Image: null,
+    challenge1Time: null,
+    liveness: [],
+    busy: false,
+    running: false,
+  });
   const intervalRef = useRef(null);
-  const livenessFramesRef = useRef([]);
-  const challengePhaseRef = useRef(1);
-  const challenge1Ref = useRef(null);
-  const challenge2Ref = useRef(null);
-  const challenge1ImageRef = useRef(null);
-  const challenge1TimeRef = useRef(null);
-  const capturingRef = useRef(false);
 
-  useEffect(() => { fetchFirstChallenge(); return () => stopDetection(); }, []);
   useEffect(() => {
-    const currentChallenge = challengePhaseRef.current === 1 ? challenge1Ref.current : challenge2Ref.current;
-    if (currentChallenge && !detected && !loading) startDetection();
-    return () => stopDetection();
-  }, [challenge1, challenge2, challengePhase]);
+    init();
+    return () => stopInterval();
+  }, []);
 
-  const fetchFirstChallenge = async () => {
-    setLoadingChallenge(true); setDetected(false); setError('');
-    challengePhaseRef.current = 1;
-    capturingRef.current = false;
-    setChallengePhase(1); setChallenge1(null); setChallenge2(null);
-    challenge1Ref.current = null; challenge2Ref.current = null;
-    challenge1ImageRef.current = null; challenge1TimeRef.current = null;
-    setCapturing(false); setStatusText('');
-    livenessFramesRef.current = []; stopDetection();
-    try {
-      const response = await api.get('/face/challenge?type=verification');
-      challenge1Ref.current = response.data.data.challenge;
-      setChallenge1(response.data.data.challenge);
-    } catch { setError('Failed to load challenge.'); }
-    finally { setLoadingChallenge(false); }
+  const stopInterval = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
   };
 
-  const fetchSecondChallenge = async (excludeId) => {
-    setDetected(false); setStatusText(t('faceAttendance.firstPassed'));
+  const init = async () => {
+    stopInterval();
+    setLoadingChallenge(true);
+    setError('');
+    setUiPhase(1);
+    setUiStatus('detecting');
+    const s = stateRef.current;
+    s.phase = 1;
+    s.challenge1 = null;
+    s.challenge2 = null;
+    s.challenge1Image = null;
+    s.challenge1Time = null;
+    s.liveness = [];
+    s.busy = false;
+    s.running = false;
     try {
-      const response = await api.get(`/face/challenge?type=verification&exclude=${excludeId}`);
-      challenge2Ref.current = response.data.data.challenge;
-      challengePhaseRef.current = 2;
-      setChallenge2(response.data.data.challenge);
-      setChallengePhase(2);
-      setStatusText('');
-    } catch { setError('Failed to load second challenge.'); }
+      const res = await api.get('/face/challenge?type=verification');
+      s.challenge1 = res.data.data.challenge;
+      setUiChallenge(res.data.data.challenge);
+    } catch {
+      setError('Failed to load challenge.');
+      setLoadingChallenge(false);
+      return;
+    }
+    setLoadingChallenge(false);
+    startInterval();
   };
 
-  const startDetection = () => {
-    stopDetection();
-    intervalRef.current = setInterval(async () => {
-      if (!webcamRef.current || capturingRef.current) return;
-      try {
-        const imageSrc = webcamRef.current.getScreenshot();
-        if (!imageSrc) return;
-        const currentChallenge = challengePhaseRef.current === 1 ? challenge1Ref.current : challenge2Ref.current;
-        if (!currentChallenge) return;
+  const startInterval = () => {
+    stopInterval();
+    stateRef.current.running = true;
+    intervalRef.current = setInterval(tick, 1500);
+  };
 
-        if (livenessFramesRef.current.length < 10) livenessFramesRef.current.push(imageSrc);
-        else { livenessFramesRef.current.shift(); livenessFramesRef.current.push(imageSrc); }
+  const tick = async () => {
+    const s = stateRef.current;
+    if (s.busy || !s.running) return;
+    if (!webcamRef.current) return;
 
-        const response = await checkChallenge(imageSrc, currentChallenge.id, user?.uuid);
-        if (response.multiple_faces) { stopDetection(); setActiveModal('multiple_faces'); return; }
-        if (response.spoof) { stopDetection(); setActiveModal('spoof'); return; }
-        if (response.wrong_person) { stopDetection(); setActiveModal('wrong_person'); return; }
-        if (response.detected) {
-          stopDetection(); setDetected(true);
-          if (challengePhaseRef.current === 1) {
-            challenge1ImageRef.current = imageSrc;
-            challenge1TimeRef.current = Date.now();
-            setStatusText(t('faceAttendance.firstPassed'));
-            await new Promise(r => setTimeout(r, 500));
-            setDetected(false);
-            await fetchSecondChallenge(currentChallenge.id);
-          } else {
-            capturingRef.current = true;
-            setCapturing(true);
-            setStatusText(t('faceAttendance.verifying'));
-            const finalFrames = [];
-            for (let i = 0; i < 3; i++) {
-              await new Promise(r => setTimeout(r, 400));
-              const frame = webcamRef.current?.getScreenshot();
-              if (frame) finalFrames.push(frame);
+    const currentChallenge = s.phase === 1 ? s.challenge1 : s.challenge2;
+    if (!currentChallenge) return;
+
+    const imageSrc = webcamRef.current.getScreenshot();
+    if (!imageSrc) return;
+
+    // Liveness frame topla
+    if (s.liveness.length < 10) s.liveness.push(imageSrc);
+    else { s.liveness.shift(); s.liveness.push(imageSrc); }
+
+    s.busy = true;
+    try {
+      const res = await checkChallenge(imageSrc, currentChallenge.id, user?.uuid);
+
+      if (res.multiple_faces) { stopInterval(); s.running = false; setActiveModal('multiple_faces'); return; }
+      if (res.spoof) { stopInterval(); s.running = false; setActiveModal('spoof'); return; }
+      if (res.wrong_person) { stopInterval(); s.running = false; setActiveModal('wrong_person'); return; }
+
+      if (res.detected) {
+        stopInterval();
+        s.running = false;
+
+        if (s.phase === 1) {
+          // 1. challenge geçildi
+          s.challenge1Image = imageSrc;
+          s.challenge1Time = Date.now();
+          setUiStatus('passed1');
+
+          await new Promise(r => setTimeout(r, 800));
+
+          // 2. challenge yükle
+          try {
+            const res2 = await api.get(`/face/challenge?type=verification&exclude=${currentChallenge.id}`);
+            s.challenge2 = res2.data.data.challenge;
+            s.phase = 2;
+            setUiPhase(2);
+            setUiChallenge(res2.data.data.challenge);
+            setUiStatus('detecting');
+            startInterval();
+          } catch {
+            setError('Failed to load second challenge.');
+          }
+        } else {
+          // 2. challenge geçildi — verify
+          setUiStatus('verifying');
+
+          // Ek frame topla
+          const extra = [];
+          for (let i = 0; i < 3; i++) {
+            await new Promise(r => setTimeout(r, 400));
+            const f = webcamRef.current?.getScreenshot();
+            if (f) extra.push(f);
+          }
+
+          const all = [...s.liveness, ...extra];
+          const frames = all.length >= 6
+            ? [all[0], all[Math.floor(all.length / 2)], all[all.length - 1]]
+            : all.slice(-3);
+
+          try {
+            const verifyRes = await api.post('/face/verify', {
+              challenges: [
+                { id: s.challenge1.id, image: s.challenge1Image, timestamp: s.challenge1Time },
+                { id: s.challenge2.id, image: imageSrc, timestamp: Date.now() }
+              ],
+              liveness_frames: frames
+            });
+            if (verifyRes.data.data.verified) {
+              setStep('qr');
+            } else {
+              setActiveModal('mismatch');
             }
-            const allFrames = [...livenessFramesRef.current, ...finalFrames];
-            const selectedFrames = allFrames.length >= 6
-              ? [allFrames[0], allFrames[Math.floor(allFrames.length / 2)], allFrames[allFrames.length - 1]]
-              : allFrames.slice(-3);
-            await handleVerify(imageSrc, selectedFrames);
-            capturingRef.current = false;
-            setCapturing(false);
+          } catch (err) {
+            const msg = (err.response?.data?.message || '').toLowerCase();
+            if (msg.includes('multiple')) setActiveModal('multiple_faces');
+            else if (msg.includes('spoof') || msg.includes('screen') || msg.includes('liveness') || msg.includes('photo')) setActiveModal('spoof');
+            else if (msg.includes('does not match')) setActiveModal('mismatch');
+            else if (msg.includes('too slow')) setActiveModal('too_slow');
+            else setActiveModal('mismatch');
           }
         }
-      } catch {}
-    }, 1500);
+      }
+    } catch {}
+    finally { s.busy = false; }
   };
 
-  const stopDetection = () => {
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-  };
-
-  const handleVerify = async (secondImage, livenessFrames) => {
-      if (!challenge1ImageRef.current) {
-    alert('c1 image NULL');
-    await fetchFirstChallenge();
-    return;
-  }
-  if (!secondImage) {
-    alert('c2 image NULL');
-    await fetchFirstChallenge();
-    return;
-  }
-    setLoading(true); setError('');
-    try {
-      const response = await api.post('/face/verify', {
-        challenges: [
-          { id: challenge1Ref.current.id, image: challenge1ImageRef.current, timestamp: challenge1TimeRef.current },
-          { id: challenge2Ref.current.id, image: secondImage, timestamp: Date.now() }
-        ],
-        liveness_frames: livenessFrames
-      });
-      if (response.data.data.verified) setStep('qr');
-      else { stopDetection(); setActiveModal('mismatch'); }
-    } catch (err) {
-      const msg = (err.response?.data?.message || '').toLowerCase();
-      if (msg.includes('multiple faces')) { stopDetection(); setActiveModal('multiple_faces'); }
-      else if (msg.includes('spoof') || msg.includes('screen') || msg.includes('liveness') || msg.includes('photo')) { stopDetection(); setActiveModal('spoof'); }
-      else if (msg.includes('does not match')) { stopDetection(); setActiveModal('mismatch'); }
-      else if (msg.includes('too slow')) { stopDetection(); setActiveModal('too_slow'); }
-      else { setError(err.response?.data?.message || 'Face verification failed.'); setDetected(false); capturingRef.current = false; setCapturing(false); await fetchFirstChallenge(); }
-    } finally { setLoading(false); }
-  };
-
-  const handleCloseModal = async () => {
-    setActiveModal(null); setDetected(false);
-    capturingRef.current = false; setCapturing(false);
-    await fetchFirstChallenge();
+  const handleCloseModal = () => {
+    setActiveModal(null);
+    init();
   };
 
   if (step === 'qr') {
@@ -205,45 +222,62 @@ const FaceAttendance = () => {
     );
   }
 
-  const currentChallenge = challengePhase === 1 ? challenge1 : challenge2;
-
   return (
     <Container>
-      <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => { stopDetection(); navigate('/student'); }}>&larr; {t('common.back')}</Button>
+      <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => { stopInterval(); navigate('/student'); }}>
+        &larr; {t('common.back')}
+      </Button>
       <Card className="shadow-sm mx-auto" style={{ maxWidth: '500px' }}>
         <Card.Header>
           <div className="d-flex justify-content-between align-items-center">
             <strong>{t('faceAttendance.title')}</strong>
-            <Badge bg={challengePhase === 1 ? 'primary' : 'success'}>{t('faceAttendance.challenge', { num: challengePhase })}</Badge>
+            <Badge bg={uiPhase === 1 ? 'primary' : 'success'}>{t('faceAttendance.challenge', { num: uiPhase })}</Badge>
           </div>
         </Card.Header>
         <Card.Body className="text-center">
           {error && <Alert variant="danger">{error}</Alert>}
-          {loadingChallenge ? <Spinner animation="border" className="mb-3" /> : currentChallenge && (
-            <Alert variant={detected ? 'success' : 'info'} className="mb-3">
-              {detected ? <strong>{statusText || t('faceAttendance.detected')}</strong> : (
+
+          {loadingChallenge ? (
+            <Spinner animation="border" className="mb-3" />
+          ) : uiChallenge && (
+            <Alert variant={uiStatus === 'passed1' ? 'success' : uiStatus === 'verifying' ? 'warning' : 'info'} className="mb-3">
+              {uiStatus === 'passed1' && <strong>{t('faceAttendance.firstPassed')}</strong>}
+              {uiStatus === 'verifying' && <><Spinner size="sm" className="me-2" /><strong>{t('faceAttendance.verifying')}</strong></>}
+              {uiStatus === 'detecting' && (
                 <>
-                  <strong>{t('faceAttendance.challenge', { num: challengePhase })}:</strong> {t(`challenges.${currentChallenge.id}`, currentChallenge.instruction)}
-                  {challengePhase === 2 && <div className="small text-danger mt-1">{t('faceAttendance.quicklyMsg')}</div>}
+                  <strong>{t('faceAttendance.challenge', { num: uiPhase })}:</strong>{' '}
+                  {t(`challenges.${uiChallenge.id}`, uiChallenge.instruction)}
+                  {uiPhase === 2 && <div className="small text-danger mt-1">{t('faceAttendance.quicklyMsg')}</div>}
                 </>
               )}
             </Alert>
           )}
-          {loading && <Alert variant="warning" className="mb-3"><Spinner size="sm" className="me-2" />{t('faceAttendance.verifying')}</Alert>}
+
           <div style={{ position: 'relative' }}>
-            <Webcam ref={webcamRef} screenshotFormat="image/jpeg" className="rounded mb-3" style={{ width: '100%', maxWidth: '400px' }} videoConstraints={{ facingMode: 'user' }} onUserMediaError={() => setError(t('faceAttendance.cameraError'))} mirrored={true} />
-            {!detected && !loading && (
-              <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.6)', color: 'white', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', whiteSpace: 'nowrap' }}>
-                {t('faceAttendance.detecting')}
-              </div>
-            )}
-            {detected && statusText && (
-              <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(34,197,94,0.8)', color: 'white', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', whiteSpace: 'nowrap' }}>
-                {statusText}
-              </div>
-            )}
+            <Webcam
+              ref={webcamRef}
+              screenshotFormat="image/jpeg"
+              className="rounded mb-3"
+              style={{ width: '100%', maxWidth: '400px' }}
+              videoConstraints={{ facingMode: 'user' }}
+              onUserMediaError={() => setError(t('faceAttendance.cameraError'))}
+              mirrored={true}
+            />
+            <div style={{
+              position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
+              background: uiStatus === 'passed1' ? 'rgba(34,197,94,0.8)' : 'rgba(0,0,0,0.6)',
+              color: 'white', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', whiteSpace: 'nowrap'
+            }}>
+              {uiStatus === 'detecting' && t('faceAttendance.detecting')}
+              {uiStatus === 'passed1' && t('faceAttendance.firstPassed')}
+              {uiStatus === 'verifying' && t('faceAttendance.verifying')}
+            </div>
           </div>
-          <p className="text-muted small">{t('faceAttendance.complete')}<br /><small>{t('faceAttendance.timeLimit')}</small></p>
+
+          <p className="text-muted small">
+            {t('faceAttendance.complete')}<br />
+            <small>{t('faceAttendance.timeLimit')}</small>
+          </p>
         </Card.Body>
       </Card>
       <SecurityModal modalType={activeModal} onClose={handleCloseModal} />
