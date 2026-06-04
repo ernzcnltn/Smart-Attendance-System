@@ -56,7 +56,8 @@
     "signInWithGoogle": "Sign in with Google",
     "orSignInWithEmail": "or sign in with email",
     "googleFailed": "Google sign in failed. Please try again.",
-    "leftDesc": "Track attendance seamlessly with QR codes, facial recognition, and real-time analytics — all in one place."
+    "leftDesc": "Track attendance seamlessly with QR codes, facial recognition, and real-time analytics — all in one place.",
+    "schoolEmailOnly": "Only university email addresses are allowed."
   },
   "forgotPassword": {
     "title": "Forgot Password?",
@@ -477,7 +478,9 @@
     "outsideClassHours": "Attendance can only be marked during class hours.",
     "notEnrolled": "You are not enrolled in this course.",
     "wrongCourse": "This QR code belongs to a different course. Please scan the correct QR code.",
-    "alreadyMarked": "Your attendance has already been marked for this session."
+    "alreadyMarked": "Your attendance has already been marked for this session.",
+    "sessionAlreadyCompleted": "A session already took place today. A new QR code cannot be generated."
+
   },
   "completeRegistration": {
     "title": "Complete Registration",

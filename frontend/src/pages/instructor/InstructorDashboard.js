@@ -159,7 +159,7 @@ const InstructorDashboard = () => {
     currentPage * ITEMS_PER_PAGE
   );
 
-  const totalStudents = courses.reduce((acc, c) => acc + (c.student_count || 0), 0);
+const totalStudents = courses.length > 0 ? (courses[0].total_unique_students || 0) : 0;
   const activeLiveCount = Object.keys(activeSessions).length;
 
   const localeMap = { tr: 'tr-TR', fr: 'fr-FR', ar: 'ar-SA', ru: 'ru-RU', en: 'en-GB' };

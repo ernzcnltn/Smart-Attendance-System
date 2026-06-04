@@ -68,16 +68,22 @@ const getMyCourses = async (req, res) => {
   try {
     let rows;
 
-    if (req.user.role === 'instructor') {
-      [rows] = await pool.query(`
-        SELECT c.uuid, c.course_code, c.course_name, c.semester, c.attendance_threshold, c.group_name,
-               COUNT(ce.student_id) as student_count
-        FROM courses c
-        LEFT JOIN course_enrollments ce ON c.id = ce.course_id
-        WHERE c.instructor_id = ? AND c.is_active = true
-        GROUP BY c.id
-        ORDER BY c.created_at DESC
-      `, [req.user.id]);
+ if (req.user.role === 'instructor') {
+  [rows] = await pool.query(`
+    SELECT c.uuid, c.course_code, c.course_name, c.semester, c.attendance_threshold, c.group_name,
+           COUNT(ce.student_id) as student_count,
+           (SELECT COUNT(DISTINCT ce2.student_id) 
+            FROM course_enrollments ce2 
+            WHERE ce2.course_id IN (
+              SELECT id FROM courses WHERE instructor_id = ?
+            )
+           ) as total_unique_students
+    FROM courses c
+    LEFT JOIN course_enrollments ce ON c.id = ce.course_id
+    WHERE c.instructor_id = ? AND c.is_active = true
+    GROUP BY c.id
+    ORDER BY c.created_at DESC
+  `, [req.user.id, req.user.id]);
    } else if (req.user.role === 'student') {
       [rows] = await pool.query(`
         SELECT c.uuid, c.course_code, c.course_name, c.semester, c.group_name,

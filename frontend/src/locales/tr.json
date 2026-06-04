@@ -56,7 +56,8 @@
     "signInWithGoogle": "Google ile Giriş Yap",
     "orSignInWithEmail": "veya e-posta ile giriş yapın",
     "googleFailed": "Google girişi başarısız. Lütfen tekrar deneyin.",
-    "leftDesc": "QR kodlar, yüz tanıma ve gerçek zamanlı analizlerle yoklamayı kolayca takip edin — hepsi tek bir yerde."
+    "leftDesc": "QR kodlar, yüz tanıma ve gerçek zamanlı analizlerle yoklamayı kolayca takip edin — hepsi tek bir yerde.",
+    "schoolEmailOnly": "Yalnızca üniversite e-posta adresleri kabul edilmektedir."
   },
   "forgotPassword": {
     "title": "Şifrenizi mi Unuttunuz?",
@@ -475,7 +476,8 @@
     "outsideClassHours": "Yoklama yalnızca ders saatlerinde alınabilir.",
     "notEnrolled": "Bu derse kayıtlı değilsiniz.",
     "wrongCourse": "Bu QR kodu farklı bir derse ait. Lütfen doğru QR kodu tarayın.",
-    "alreadyMarked": "Bu oturum için yoklamanız zaten kaydedilmiş."
+    "alreadyMarked": "Bu oturum için yoklamanız zaten kaydedilmiş.",
+    "sessionAlreadyCompleted": "Bugün için oturum zaten gerçekleşti. Yeni QR kodu oluşturulamaz."
   },
   "completeRegistration": {
     "title": "Kaydı Tamamla",

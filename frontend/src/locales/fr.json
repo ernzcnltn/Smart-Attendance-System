@@ -56,7 +56,8 @@
     "signInWithGoogle": "Se connecter avec Google",
     "orSignInWithEmail": "ou se connecter par e-mail",
     "googleFailed": "La connexion Google a échoué. Veuillez réessayer.",
-    "leftDesc": "Suivez les présences avec des codes QR, la reconnaissance faciale et des analyses en temps réel — tout en un seul endroit."
+    "leftDesc": "Suivez les présences avec des codes QR, la reconnaissance faciale et des analyses en temps réel — tout en un seul endroit.",
+    "schoolEmailOnly": "Seules les adresses e-mail universitaires sont autorisées."
   },
   "forgotPassword": {
     "title": "Mot de passe oublié ?",
@@ -475,7 +476,8 @@
     "outsideClassHours": "La présence ne peut être marquée que pendant les heures de cours.",
     "notEnrolled": "Vous n'êtes pas inscrit à ce cours.",
     "wrongCourse": "Ce QR appartient à un autre cours.",
-    "alreadyMarked": "Votre présence a déjà été enregistrée."
+    "alreadyMarked": "Votre présence a déjà été enregistrée.",
+    "sessionAlreadyCompleted": "Une session a déjà eu lieu aujourd'hui. Impossible de générer un nouveau QR."
   },
   "completeRegistration": {
     "title": "Finaliser l'inscription",

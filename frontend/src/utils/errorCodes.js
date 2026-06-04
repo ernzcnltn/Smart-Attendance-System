@@ -18,6 +18,9 @@ export const getErrorMessage = (err, t) => {
     NOT_ENROLLED:          t('errors.notEnrolled'),
     WRONG_COURSE:          t('errors.wrongCourse'),
     ALREADY_MARKED:        t('errors.alreadyMarked'),
+    SCHOOL_EMAIL_ONLY: t('errors.schoolEmailOnly'),
+    SESSION_ALREADY_COMPLETED: t('errors.sessionAlreadyCompleted'),
+
   };
 
   return code && codeMap[code] ? codeMap[code] : fallback;

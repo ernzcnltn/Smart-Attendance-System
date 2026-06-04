@@ -133,8 +133,7 @@ const completeGoogleRegistration = async (req, res) => {
 
   const schoolDomain = process.env.SCHOOL_DOMAIN || 'final.edu.tr';
   if (!email.endsWith(`@${schoolDomain}`)) {
-    return errorResponse(res, `Only ${schoolDomain} email addresses are allowed.`, 400);
-  }
+return errorResponse(res, `Only ${schoolDomain} email addresses are allowed.`, 400, 'SCHOOL_EMAIL_ONLY');  }
 
   try {
     const [existing] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);

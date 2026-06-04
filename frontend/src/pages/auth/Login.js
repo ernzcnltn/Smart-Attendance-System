@@ -86,11 +86,18 @@ const Login = () => {
 
   const currentLang = LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[1];
 
-  useEffect(() => {
-    const err = searchParams.get('error');
-    if (err === 'google_failed') setError(t('login.googleFailed'));
-    else if (err) setError(decodeURIComponent(err));
-  }, []);
+ useEffect(() => {
+  const err = searchParams.get('error');
+  if (err === 'google_failed') setError(t('login.googleFailed'));
+  else if (err) {
+    const decoded = decodeURIComponent(err);
+    if (decoded.includes('email addresses are allowed')) {
+      setError(t('login.schoolEmailOnly'));
+    } else {
+      setError(decoded);
+    }
+  }
+}, [i18n.language]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

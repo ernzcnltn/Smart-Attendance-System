@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useBranding } from '../../context/BrandingContext';
 import api from '../../services/api';
 import { setToken, setUser } from '../../utils/helpers';
+import { getErrorMessage } from '../../utils/errorCodes';
 
 const CompleteRegistration = () => {
   const navigate = useNavigate();
@@ -38,7 +39,7 @@ const CompleteRegistration = () => {
       setToken(token); setUser(user); updateUser(user);
       navigate('/student');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed.');
+      setError(getErrorMessage(err, t));
     } finally {
       setLoading(false);
     }
