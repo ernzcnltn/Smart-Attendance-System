@@ -9,8 +9,8 @@ const {
   deleteSession,
   getSessionsByCourse,
   getActiveSession,
-  getActiveSessionForStudent
-
+  getActiveSessionForStudent,
+  refreshQRToken
 } = require('../controllers/sessionController');
 const { authenticate, authorize } = require('../middleware/auth');
 const { checkNetwork, checkLocation } = require('../middleware/networkCheck');
@@ -26,5 +26,5 @@ router.get('/:uuid/attendance', authorize('instructor', 'admin'), getSessionAtte
 router.delete('/:uuid', authorize('instructor', 'admin'), deleteSession);
 router.get('/course/:course_uuid/active', authorize('instructor', 'admin'), getActiveSession);
 router.get('/course/:course_uuid/active-student', authorize('student'), getActiveSessionForStudent);
-
+router.post('/refresh-qr/:session_uuid', authenticate, refreshQRToken);
 module.exports = router;

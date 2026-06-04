@@ -196,15 +196,28 @@ const markAttendance = async (req, res) => {
     }
 
     // GPS kontrolü — online session ise atla
-    if (!session.is_online && session.instructor_lat && session.instructor_lng) {
-      const GPS_RADIUS = 75;
+   if (!session.is_online) {
+      if (!session.instructor_lat || !session.instructor_lng) {
+        return errorResponse(res, 'Session location not set. Cannot verify attendance.', 400, 'NO_INSTRUCTOR_LOCATION');
+      }
+      const studentLat = parseFloat(latitude);
+      const studentLng = parseFloat(longitude);
+      if (isNaN(studentLat) || isNaN(studentLng)) {
+        return errorResponse(res, 'Invalid location data.', 400, 'INVALID_LOCATION');
+      }
+      const GPS_RADIUS = 1;
       const distance = getDistanceMeters(
         parseFloat(session.instructor_lat), parseFloat(session.instructor_lng),
-        parseFloat(latitude), parseFloat(longitude)
+        studentLat, studentLng
       );
       console.log(`[GPS] Distance: ${Math.round(distance)}m (max: ${GPS_RADIUS}m)`);
-      if (distance > GPS_RADIUS) {
-        return errorResponse(res, `You must be within ${GPS_RADIUS} meters of the classroom. Your distance: ${Math.round(distance)}m.`, 400, 'GPS_TOO_FAR');
+      if (isNaN(distance) || distance > GPS_RADIUS) {
+        return errorResponse(
+          res,
+          `You must be within ${GPS_RADIUS} meters of the classroom. Your distance: ${isNaN(distance) ? 'unknown' : Math.round(distance)}m.`,
+          400,
+          'GPS_TOO_FAR'
+        );
       }
     }
 
@@ -410,8 +423,42 @@ const getActiveSessionForStudent = async (req, res) => {
 };
 
 
+const refreshQRToken = async (req, res) => {
+  const { session_uuid } = req.params;
+  try {
+    const [sessions] = await pool.query(
+      `SELECT cs.id, cs.qr_expires_at, cs.is_active, c.instructor_id
+       FROM class_sessions cs
+       JOIN courses c ON cs.course_id = c.id
+       WHERE cs.uuid = ?`,
+      [session_uuid]
+    );
+
+    if (sessions.length === 0) return errorResponse(res, 'Session not found.', 404);
+    const session = sessions[0];
+
+    if (session.instructor_id !== req.user.id) return errorResponse(res, 'Access denied.', 403);
+    if (!session.is_active) return errorResponse(res, 'Session is not active.', 400);
+    if (new Date() > new Date(session.qr_expires_at)) return errorResponse(res, 'Session has expired.', 400);
+
+    const qr_token = generateUUID();
+    await pool.query(
+      'UPDATE class_sessions SET qr_token = ? WHERE id = ?',
+      [qr_token, session.id]
+    );
+
+    const qrData = JSON.stringify({ session_uuid, qr_token, expires_at: session.qr_expires_at });
+    const qrCodeImage = await QRCode.toDataURL(qrData);
+
+    return successResponse(res, { qr_code: qrCodeImage, qr_token });
+  } catch (error) {
+    console.error('Refresh QR error:', error.message);
+    return errorResponse(res, 'Failed to refresh QR token.');
+  }
+};
+
 module.exports = {
   createSession, generateQR, markAttendance,
   getSessionAttendance, getMyAttendance, deleteSession,
-  getSessionsByCourse, getActiveSession, getActiveSessionForStudent
+  getSessionsByCourse, getActiveSession, getActiveSessionForStudent, refreshQRToken
 };

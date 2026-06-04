@@ -22,6 +22,7 @@ const GenerateQR = () => {
   const [location, setLocation] = useState(null);
   const [locationError, setLocationError] = useState('');
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [qrRefreshInterval, setQrRefreshInterval] = useState(null);
 
   useEffect(() => {
     if (!isOnline) getLocation();
@@ -77,6 +78,21 @@ const GenerateQR = () => {
       const data = response.data.data;
       setQrData(data);
 
+      // Her 30 saniyede QR token yenile
+const refreshInterval = setInterval(async () => {
+  try {
+    const refreshRes = await api.post(`/sessions/refresh-qr/${data.session_uuid}`);
+    setQrData(prev => ({
+      ...prev,
+      qr_code: refreshRes.data.data.qr_code,
+      qr_token: refreshRes.data.data.qr_token
+    }));
+  } catch (err) {
+    console.error('QR refresh failed:', err);
+  }
+}, 10000); // 10 saniye
+setQrRefreshInterval(refreshInterval);
+
       let seconds = parseInt(duration) * 60;
       setTimeLeft(seconds);
       const interval = setInterval(() => {
@@ -104,6 +120,7 @@ const GenerateQR = () => {
     setQrData(null);
     setTimeLeft(null);
     setTimerInterval(null);
+    setQrRefreshInterval(null);
   };
 
   const handleSubmit = (e) => {

@@ -89,22 +89,25 @@ const MyCourses = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, [viewMode]);
 
-  const getCourseStatus = (uuid) => {
-    const list = schedules[uuid] || [];
-    if (!list.length) return 'no_schedule';
-    const now = new Date();
-    const todayName = DAYS[now.getDay()];
-    const cur = now.toTimeString().split(' ')[0];
-    const today = list.filter(s => s.day === todayName);
-    if (!today.length) return 'not_today';
-    for (const s of today) {
-      const st = s.start_time.length === 5 ? `${s.start_time}:00` : s.start_time;
-      const en = s.end_time.length === 5 ? `${s.end_time}:00` : s.end_time;
-      if (cur >= st && cur <= en) return 'active';
-      if (cur < st) return { status: 'upcoming', start_time: s.start_time.substring(0, 5), end_time: s.end_time.substring(0, 5) };
-    }
-    return 'ended';
-  };
+ const getCourseStatus = (uuid) => {
+  const course = courses.find(c => c.uuid === uuid);
+  if (course?.has_active_session) return 'active';
+  
+  const list = schedules[uuid] || [];
+  if (!list.length) return 'no_schedule';
+  const now = new Date();
+  const todayName = DAYS[now.getDay()];
+  const cur = now.toTimeString().split(' ')[0];
+  const today = list.filter(s => s.day === todayName);
+  if (!today.length) return 'not_today';
+  for (const s of today) {
+    const st = s.start_time.length === 5 ? `${s.start_time}:00` : s.start_time;
+    const en = s.end_time.length === 5 ? `${s.end_time}:00` : s.end_time;
+    if (cur >= st && cur <= en) return 'upcoming';
+    if (cur < st) return { status: 'upcoming', start_time: s.start_time.substring(0, 5), end_time: s.end_time.substring(0, 5) };
+  }
+  return 'ended';
+};
 
   const handleCourseClick = (course) => {
     const status = getCourseStatus(course.uuid);

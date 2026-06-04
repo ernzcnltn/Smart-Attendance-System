@@ -78,10 +78,17 @@ const getMyCourses = async (req, res) => {
         GROUP BY c.id
         ORDER BY c.created_at DESC
       `, [req.user.id]);
-    } else if (req.user.role === 'student') {
+   } else if (req.user.role === 'student') {
       [rows] = await pool.query(`
         SELECT c.uuid, c.course_code, c.course_name, c.semester, c.group_name,
-               u.full_name AS instructor_name
+               u.full_name AS instructor_name,
+               CASE WHEN EXISTS (
+                 SELECT 1 FROM class_sessions cs
+                 WHERE cs.course_id = c.id
+                 AND cs.session_date = CURDATE()
+                 AND cs.is_active = true
+                 AND cs.qr_expires_at > NOW()
+               ) THEN true ELSE false END AS has_active_session
         FROM courses c
         JOIN course_enrollments ce ON c.id = ce.course_id
         JOIN users u ON c.instructor_id = u.id
